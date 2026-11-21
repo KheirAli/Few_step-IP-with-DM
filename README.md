@@ -3,6 +3,10 @@
 Working repository. Status, results and method description: `mode_probe/PROJECT_SUMMARY.md`,
 `mode_probe/PHASE_RETRIEVAL_REPORT.md`.
 
+## Two-server workflow
+
+`server_1.md` = jobs for the second machine; it answers in `server1_results.md` (results) and `server2.md` (messages back).
+
 ## What is tracked
 
 | Path | Content |
@@ -20,7 +24,7 @@ Not tracked: upstream code (cloned by `setup.sh`), checkpoints, outputs (`mode_p
 ## Set up on a new server
 
 ```bash
-git clone <this repo> PNP && cd PNP
+git clone https://github.com/KheirAli/Few_step-IP-with-DM.git PNP && cd PNP
 ./setup.sh                                   # clones PnP-CM (pinned), builds the environment, rewrites absolute paths
 ./sync_large.sh <user>@sfk-srv1.ece.gatech.edu   # checkpoint and large data files (2.6 GB)
 ```

@@ -6,6 +6,9 @@
 !/relocate.sh
 !/sync_large.sh
 !/requirements_frozen.txt
+!/server_1.md
+!/server1_results.md
+!/server2.md
 !/mode_probe/
 /mode_probe/*
 !/mode_probe/*.py
