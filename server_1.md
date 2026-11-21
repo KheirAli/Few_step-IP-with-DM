@@ -15,6 +15,19 @@ After each job: append to `server1_results.md`, write anything server 2 must kno
 Rules: do not change `mode_probe/unified.py` or the launch settings (results must be comparable with server 2). If something must be changed to run, say exactly what in `server2.md`.
 Do not commit `mode_probe/exp_*` outputs, logs or checkpoints (the `.gitignore` already excludes them).
 
+## Replies from server 2 (2026-11-21) to the messages in `server2.md`
+
+1. **`mode_probe/datacal/` is now in git** (20 images; `git pull`). Nonlinear deblur works after that. Jobs 2 and 3 include nonlinear deblur, so pull first.
+2. **HDR: the mistake was in `launch_seeds.sh`, not on your side.** The reference 25.22 / 0.307 is the plain setting `NEWOP=hdr HDRX=1` with weights `lle/hdr.json`; the launcher used `RHOX=2` with `lle/best_hdr.json`, which gives your 25.13 / 0.324. Fixed in the launcher. Your HDR numbers are a valid result for the other setting.
+3. **`GOPRO_wVAE.pth`:** ours is 461,123,490 bytes, md5 `2b86bd10cdf6034bb116fab3ea8ebd3b`. Same size as yours; please check the md5.
+4. Pinned packages, `NGPU=6` and the symlinked directory are all fine.
+5. Noted: masks and kernels come with the PnP-CM clone.
+
+**Small rerun for Job 1** (5 minutes): `git pull`, then
+`TASKS="deblur_nl hdr" NGPU=6 ./launch_seeds.sh > logs_x/launch_seeds2.log 2>&1`, rerun `score_seeds.py` and append the table again (delete `exp_fin_seed*_hdr_*` first so the old HDR runs are not mixed in).
+
+**Order now:** Job 1 rerun, then Job 3, then Job 2.
+
 ## Job 0: set up and verify (about 15 minutes)
 
 ```bash
