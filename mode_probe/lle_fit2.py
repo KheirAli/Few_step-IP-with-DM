@@ -43,8 +43,10 @@ if EIG:
     C = torch.load(out) if os.path.exists(out) else {}; C[str(K)] = {"U": Ub.float().cpu(), "A": A_.float().cpu(), "s": sr.float().cpu()}; torch.save(C, out)
     print(f"LLEFIT2 {pat} step {K + 1} mode {mode} n={n}: weight outside the embedding " + " ".join(f"{v:+.3f}" for v in sr.tolist()) + f" | last-step weight across the 30 coordinates: min {float(A_[-1].min()):+.2f} max {float(A_[-1].max()):+.2f}"); sys.exit(0)
 if STRUCT:
-    I_ = torch.eye(T_, device=dev, dtype=torch.float64); w0 = torch.linalg.solve(Gq.sum(0) + 1e-6 * Gq.sum(0).diagonal().mean() * I_, bq.sum(0)); tr = Gq.diagonal(dim1=1, dim2=2).mean(1).clamp_min(1e-12)
-    Wq = torch.linalg.solve(Gq + lam * tr[:, None, None] * I_, (bq + lam * tr[:, None] * w0)[..., None])[..., 0].T          # [terms, bins]
+    # pseudo-inverse: two terms can coincide exactly (e.g. a data-fit image equal to the previous passed-on image), and a bin can be empty
+    I_ = torch.eye(T_, device=dev, dtype=torch.float64); Gs_ = Gq.sum(0); w0 = torch.linalg.pinv(Gs_ + 1e-6 * Gs_.diagonal().mean() * I_, hermitian=True, rtol=1e-9) @ bq.sum(0); tr = Gq.diagonal(dim1=1, dim2=2).mean(1)
+    tr = torch.where(tr > 1e-9 * tr.max(), tr, tr.max())
+    Wq = (torch.linalg.pinv(Gq + lam * tr[:, None, None] * I_, hermitian=True, rtol=1e-9) @ (bq + lam * tr[:, None] * w0)[..., None])[..., 0].T          # [terms, bins]
     if kind == "scalar": Wq = w0[:, None].expand(T_, NB).clone()
     C = torch.load(out) if os.path.exists(out) else {}; C[str(K)] = {"kind": "gate" if kind == "gate" else "band", "z": ZF, "W": Wq.float().cpu(), "thr": THR.float().cpu()}; torch.save(C, out)
     print(f"LLEFIT2 {pat} step {K + 1} mode {mode} n={n}: overall " + " ".join(f"{v:+.3f}" for v in w0.tolist()) + " | last term per bin " + " ".join(f"{v:+.2f}" for v in Wq[-1].tolist()) + (" | data-fit term per bin " + " ".join(f"{v:+.2f}" for v in Wq[-2].tolist()) if ZF else "")); sys.exit(0)
