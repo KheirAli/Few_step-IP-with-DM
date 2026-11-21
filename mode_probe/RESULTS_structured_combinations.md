@@ -68,3 +68,32 @@ LLEFIT2 j3cal3_gate_prmask_phase_retrieval step 4 mode gate n=512: overall +0.03
 LLEFIT2 j3cal3_zscalar_prmask_phase_retrieval step 4 mode zscalar n=512: overall +0.036 +0.017 +1.142 -0.198 -0.002 | last term per bin -0.00 | data-fit term per bin -0.20
 LLEFIT2 j3cal3_zband8_prmask_phase_retrieval step 4 mode zband8 n=512: overall +0.015 -0.846 +2.749 -0.126 -0.793 | last term per bin -0.80 -0.80 -0.80 -0.80 -0.79 -0.72 -0.24 -0.24 | data-fit term per bin -0.12 -0.12 -0.12 -0.12 -0.12 -0.15 -0.19 -0.20
 ```
+
+# Best configuration per task + structured combinations (2026-11-21)
+
+128 generated calibration images, 107 test images, 4 calls, 81 fits, no failures. Base = each task's best configuration (frequency-weighted data-fit where used; HDR first-step sigma 3.0).
+The masked phase-retrieval row is NOT valid: the fit did not align the channel signs of the calibration targets (fixed afterwards, rerun pending).
+| Task | Scalar (9 numbers) | 8 frequency bands | 8 bands + data-fit term |
+|---|---|---|---|
+| sr_bicubic | 27.96/0.285 | 28.08/0.301 (+0.12) | 28.12/0.303 (+0.16) |
+| deblur_gauss | 29.50/0.249 | 29.67/0.255 (+0.17) | 29.67/0.253 (+0.17) |
+| inpainting | 29.88/0.199 | 30.22/0.198 (+0.34) | 30.23/0.198 (+0.35) |
+| jpeg | 26.78/0.352 | 26.94/0.341 (+0.16) | 27.02/0.338 (+0.24) |
+| deblur_nl | 26.34/0.343 | 26.41/0.333 (+0.07) | 26.43/0.332 (+0.08) |
+| hdr | 25.88/0.282 | 26.09/0.276 (+0.21) | 26.32/0.269 (+0.45) |
+| quant | 30.83/0.218 | 30.99/0.218 (+0.16) | 31.05/0.209 (+0.22) |
+| onebit | 29.44/0.233 | 30.23/0.214 (+0.79) | 30.30/0.213 (+0.86) |
+| prmask | 23.99/0.335 | 24.10/0.337 (+0.10) | 24.17/0.332 (+0.18) |
+
+# Noise-schedule tuning (2026-11-21), no extrapolation, PSNR on 24 real selection images
+
+| Task | Current | Full search (112 runs) | Coordinate search (19 runs) | Best error-proportional rule (c) |
+|---|---|---|---|---|
+| HDR | 22.44 | 24.75 | 23.69 | 23.44 (c=3) |
+| One-bit | 26.85 | 27.78 | 28.00 | 27.83 (c=1.5) |
+| Quantisation | 28.31 | 28.96 | 28.77 | 28.70 (c=3) |
+| Inpainting | 28.50 | 28.79 | 28.57 | 27.81 (c=1) |
+| SR | 27.06 | 27.15 | 27.08 | 27.05 (c=1.5) |
+| Gaussian deblur | 28.36 | 28.44 | 28.36 | 28.02 (c=1) |
+
+Scripts: sched_search.py, sched_cd.py, sched_rule.py; schedules in sched_search_<task>.json / sched_cd_<task>.json. Masked phase retrieval with sign-aligned fit: scalar 27.48/0.300, band8 27.87/0.276, zband8 27.93/0.271.

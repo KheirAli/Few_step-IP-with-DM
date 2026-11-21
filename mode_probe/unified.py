@@ -941,7 +941,7 @@ import torch.nn.functional as Fn
 
 # EQ: random transform before the model call, undone after it (equivariant plug-and-play, Terris et al. 2024), so that a structured
 # input error does not line up with the model in the same way at every step.  EQ=flip | shift<S> (circular shift up to S pixels) | flipshift<S>
-EQ = os.environ.get("EQ", ""); DIAG3 = os.environ.get("DIAG3", "0") == "1"
+NREUSE = float(os.environ.get("NREUSE", "0")); EQ = os.environ.get("EQ", ""); DIAG3 = os.environ.get("DIAG3", "0") == "1"
 
 
 def cm(model, zin, level):
@@ -1241,12 +1241,17 @@ def run_steps(P, model, st, sched, idx, nfe, pas=0):
                 # noise only where the measurement says little: "hard" = none in the measured directions; "keep" = same, rescaled to the same total power
                 sv_, _, meas_ = _svd_parts(P); nv = P.F.Vt(nz)[0] * (~meas_).float(); nn_ = P.F.V(nv[None]).reshape(nz.shape)
                 nz = nn_ * (float(nz.norm() / nn_.norm().clamp(min=1e-8)) if NULLNOISE == "keep" else 1.0)
+            if NREUSE > 0 and n_it > 0 and state.get("eps_prev") is not None:
+                # deterministic (DDIM-like) re-noising: re-use the part of the previous model input that the model removed, instead of all-fresh noise
+                ep_ = state["eps_prev"]; ep_ = ep_ * (nz.norm() / ep_.norm().clamp(min=1e-8)); nz = NREUSE * ep_ + (1.0 - NREUSE ** 2) ** 0.5 * nz
             z_noisy = zt + ut_m + nz
             if INVIN and P.ATy is not None and float(sig_t[i]) >= 0.05:
                 z_noisy = inv_input(P, xt if (INVSRC == "x" and n_it > 0) else zt + ut_m, sig_t[i]); nz = z_noisy - (zt + ut_m)
                 if pas == 0 and state["img"] < S0:
                     print("INVIN fraction of components taken from the inverted measurement:", round(state["invfrac"], 3), "at sigma", round(float(sig_t[i]), 3), flush=True)
             xt = cm(model, z_noisy, told_level(sig_t[i], sig_cm[i], pas, i) * (FINTOLD if n_it == len(idx) - 1 else 1.0))
+            if NREUSE > 0:
+                state["eps_prev"] = (z_noisy - xt).detach()
             if DIAG3 and state["gt"] is not None:
                 # What makes the model's input error hard?  Same truth, same added noise, three versions of the error (diagnostic only, uses the truth):
                 #   actual error | the same error with random Fourier phases (same spectrum, no structure) | white noise of the same power | no error

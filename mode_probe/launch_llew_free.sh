@@ -10,7 +10,7 @@ declare -A CFG=( [sr_bicubic]="sr_bicubic LINEXACT=1" [deblur_gauss]="deblur_gau
 TASKS=${TASKS:-sr_bicubic deblur_gauss inpainting jpeg jpegtrue deblur_nl hdr quant onebit prmask}; MODES=${MODES:-scalar blk8 pixs pix dct30 eig30}
 GL=(0 1 2 4 5 7); g=0; runone() { local tag=$1 D=$2 SH=$3 task=$4 mode=$5; c=(${CFG[$task]}); deg=${c[0]}; for sh in $SH; do
   env CUDA_VISIBLE_DEVICES=${GL[$((g%6))]} DATA=$(realpath $D) SHARD=$sh SAMPLE_SEED=1 RESTART=never NOISE=white NOLOG=1 MODE=unified TILT=0.5 ${c[@]:1} LLE=$(realpath $L/lle)/${TAG}_${mode}_${task}.pt SAVE_STEPS=1 $P $L/unified.py fin_${TAG}${tag}_${mode}_${task}_$deg --deg=$deg > $L/logs_x/${TAG}${tag}_${mode}_${task}_${sh%%:*}.out 2>&1 & g=$((g+1)); if (( g % PAR == 0 )); then wait; fi; done; }
-fit() { local K=$1 src=$2 task=$3 mode=$4; c=(${CFG[$task]}); CUDA_VISIBLE_DEVICES=4 $P $L/lle_fit2.py ${TAG}cal${K}_${src}_${task}_${c[0]} $L/lle/${TAG}_${mode}_${task}.pt $K $mode 2>&1 | grep -E "LLEFIT2|Error"; }
+fit() { local K=$1 src=$2 task=$3 mode=$4; c=(${CFG[$task]}); CUDA_VISIBLE_DEVICES=4 $P $L/lle_fit2.py ${TAG}cal${K}_${src}_${task}_${c[0]} $L/lle/${TAG}_${mode}_${task}.pt $K $mode $([ $task = prmask ] && echo pr) 2>&1 | grep -E "LLEFIT2|Error"; }
 rm -f $L/lle/${TAG}_*.pt
 # round 1: no weights exist yet, so one run ("base") serves every mode
 for task in $TASKS; do runone cal1 $L/data_gen512 "${CALSH:-0:256 256:512}" $task base; done; wait
