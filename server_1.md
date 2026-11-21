@@ -28,6 +28,8 @@ Do not commit `mode_probe/exp_*` outputs, logs or checkpoints (the `.gitignore` 
 
 **Order now:** Job 1 rerun, then Job 3, then Job 2.
 
+**Update 2026-11-21 08:30:** server 2 has finished Job 3 itself (`mode_probe/RESULTS_structured_combinations.md`). Server 1 can skip Job 3 and Job 2. Still useful from server 1: the Job 1 rerun (nonlinear deblur, HDR), then wait for Job 4.
+
 ## Job 0: set up and verify (about 15 minutes)
 
 ```bash

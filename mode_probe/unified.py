@@ -939,9 +939,21 @@ XLOG = []
 import torch.nn.functional as Fn
 
 
+# EQ: random transform before the model call, undone after it (equivariant plug-and-play, Terris et al. 2024), so that a structured
+# input error does not line up with the model in the same way at every step.  EQ=flip | shift<S> (circular shift up to S pixels) | flipshift<S>
+EQ = os.environ.get("EQ", ""); DIAG3 = os.environ.get("DIAG3", "0") == "1"
+
+
 def cm(model, zin, level):
     c_skip, c_out, c_in = [append_dims(s, zin.ndim) for s in get_scalings_for_boundary_condition(level)]
-    return torch.clamp(c_out * model(c_in * zin, 1000 * 0.25 * torch.log(level + 1e-44)) + c_skip * zin, -1.0, 1.0)
+    f = lambda z: torch.clamp(c_out * model(c_in * z, 1000 * 0.25 * torch.log(level + 1e-44)) + c_skip * z, -1.0, 1.0)
+    if not EQ:
+        return f(zin)
+    fl = "flip" in EQ and bool(torch.rand(()) < 0.5); S = int(EQ.split("shift")[1]) if "shift" in EQ else 0
+    dx, dy = (int(torch.randint(-S, S + 1, ())), int(torch.randint(-S, S + 1, ()))) if S else (0, 0)
+    z = torch.flip(zin, dims=[-1]) if fl else zin; z = torch.roll(z, (dy, dx), dims=(-2, -1)) if S else z
+    o = f(z); o = torch.roll(o, (-dy, -dx), dims=(-2, -1)) if S else o
+    return torch.flip(o, dims=[-1]) if fl else o
 
 
 def _rank(a):
@@ -1235,6 +1247,16 @@ def run_steps(P, model, st, sched, idx, nfe, pas=0):
                 if pas == 0 and state["img"] < S0:
                     print("INVIN fraction of components taken from the inverted measurement:", round(state["invfrac"], 3), "at sigma", round(float(sig_t[i]), 3), flush=True)
             xt = cm(model, z_noisy, told_level(sig_t[i], sig_cm[i], pas, i) * (FINTOLD if n_it == len(idx) - 1 else 1.0))
+            if DIAG3 and state["gt"] is not None:
+                # What makes the model's input error hard?  Same truth, same added noise, three versions of the error (diagnostic only, uses the truth):
+                #   actual error | the same error with random Fourier phases (same spectrum, no structure) | white noise of the same power | no error
+                g3 = state["gt"].to(zt.device).float(); e3 = (zt + ut_m).float() - g3; lv3 = told_level(sig_t[i], sig_cm[i], pas, i) * (FINTOLD if n_it == len(idx) - 1 else 1.0)
+                E3 = torch.fft.fft2(e3, norm="ortho"); e_s = torch.fft.ifft2(E3.abs() * torch.exp(1j * torch.angle(torch.fft.fft2(torch.randn_like(e3)))), norm="ortho").real
+                e_w = torch.randn_like(e3); e_w = e_w * e3.norm() / e_w.norm(); bi3 = lle_band_index(256, 8, zt.device)
+                be3 = lambda a: [float(v) for v in torch.zeros(8, device=zt.device).index_add_(0, bi3.reshape(-1).repeat(3), (torch.fft.fft2(a.float(), norm="ortho").abs() ** 2).reshape(-1)) / a.numel()]
+                with torch.no_grad():
+                    outs3 = [xt] + [cm(model, (g3 + ee + nz).to(z_noisy.dtype), lv3) for ee in (e_s, e_w, torch.zeros_like(e3))]
+                state.setdefault("diag3", []).append([be3(e3)] + [be3(o - g3) for o in outs3] + [be3(nz)])
             if DIAG2 or DAMP > 0:
                 state["raw_x"] = xt.clone()
             if DAMP > 0 and (not DAMPSTEPS or str(n_it) in DAMPSTEPS.split(",")) and (P.y is not None or P.ATy is not None):
@@ -1448,7 +1470,7 @@ def finish(x, rec, x_first=None):
         rec["sign_ok"] = state.pop("sign_ok")
     if state.get("reslog"):
         rec["reslog"] = state.pop("reslog")
-    for k_ in ("diag2", "damp_a", "disc_rho"):
+    for k_ in ("diag2", "damp_a", "disc_rho", "diag3"):
         if state.get(k_):
             rec[k_] = state.pop(k_)
     if CALW and state.get("calacc"):
