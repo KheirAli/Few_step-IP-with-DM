@@ -47,7 +47,7 @@ Current experiments (weights of the extrapolation that vary over the image):
 ```bash
 cd mode_probe
 ./launch_llepx.sh > logs_x/launch_llepx.log 2>&1     # scalar / 8x8 blocks / per pixel / per pixel and colour, 512 generated calibration images
-./launch_llepy.sh > logs_x/launch_llepy.log 2>&1     # 30 smooth maps / 30-dimensional face embedding
+./launch_llepy_now.sh > logs_x/launch_llepy_now.log 2>&1   # 30 smooth maps / 30-dimensional face embedding (its GPU list GL=(...) puts most jobs on GPU 4; edit)
 ```
 
 The launchers assume 8 GPUs (`CUDA_VISIBLE_DEVICES=$((g%8))`, 16 jobs at a time); edit those two numbers for another machine.
