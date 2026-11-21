@@ -5,6 +5,13 @@ usage: lle_fit2.py <exp pattern> <out .pt> <K> <mode> [pr]"""
 import sys, glob, re, os, math, itertools, numpy as np, torch
 from PIL import Image
 pat, out, K, mode = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]; pr = len(sys.argv) > 5; dev = torch.device("cuda:0"); lam = float(os.environ.get("LLE_RIDGE", "0.05"))
+# structured modes: band<B> (per radial frequency band) | gate (per level of step-to-step change, nonlinear) | zscalar / zband<B> (data-fit image added as a term)
+ZF = mode.startswith("z"); kind = ("band" if "band" in mode else "gate" if mode == "gate" else "scalar" if mode == "zscalar" else ""); STRUCT = kind != ""
+if STRUCT:
+    sys.path.insert(0, "../mode_probe"); THR = torch.tensor([0.01, 0.02, 0.04, 0.08, 0.16]); NB = int(mode.split("band")[1]) if kind == "band" else (6 if kind == "gate" else 1); T_ = K + 1 + int(ZF)
+    Gq = torch.zeros(NB, T_, T_, device=dev, dtype=torch.float64); bq = torch.zeros(NB, T_, device=dev, dtype=torch.float64)
+    def band_index(nn_, B):
+        f = torch.fft.fftfreq(nn_, device=dev) * nn_; r = (f[:, None] ** 2 + f[None, :] ** 2).sqrt(); return torch.bucketize(r, torch.tensor([1.5 * 2 ** k for k in range(B - 1)], device=dev))
 EIG = mode.startswith("eig")
 if EIG:
     Ub = torch.load("../mode_probe/lle/eig30_basis.pt").to(dev).double(); Gm = torch.zeros(30, K + 1, K + 1, device=dev, dtype=torch.float64); bm = torch.zeros(30, K + 1, device=dev, dtype=torch.float64)
@@ -16,6 +23,16 @@ for d in glob.glob(f"../mode_probe/exp_fin_{pat}_s*"):
         gt = (torch.from_numpy(np.asarray(Image.open(lab[0]).convert("RGB")).astype(np.float32) / 255).permute(2, 0, 1) * 2 - 1).to(dev).double(); S = {k: v[0].float() for _, k, v in R["steps"]}
         if pr: gt = gt * torch.sign((R["x_raw"][0].to(dev).double() * gt).sum(dim=(1, 2), keepdim=True))
         H = torch.stack([S[j] for j in range(K)] + [S[100 + K]]).to(dev).double()          # [K+1, 3, 256, 256]
+        if STRUCT:
+            Hs = torch.stack([S[j] for j in range(K)] + ([S[200 + K]] if ZF else []) + [S[100 + K]]).to(dev).double()
+            if kind == "band": Hq = torch.fft.fft2(Hs, norm="ortho"); gq = torch.fft.fft2(gt, norm="ortho"); bi = band_index(256, NB)[None].expand(3, 256, 256).reshape(-1)
+            elif kind == "gate": Hq = Hs; gq = gt; bi = torch.bucketize((Hs[-1] - Hs[K - 1]).abs().mean(0), THR.to(dev).double())[None].expand(3, 256, 256).reshape(-1)
+            else: Hq = Hs; gq = gt; bi = torch.zeros(3 * 256 * 256, dtype=torch.long, device=dev)
+            Hq = Hq.flatten(1); gq = gq.flatten()
+            for j in range(T_):
+                bq[:, j].index_add_(0, bi, (Hq[j].conj() * gq).real)
+                for k in range(j, T_): v_ = torch.zeros(NB, device=dev, dtype=torch.float64).index_add_(0, bi, (Hq[j].conj() * Hq[k]).real); Gq[:, j, k] += v_; Gq[:, k, j] += v_ * (k != j)
+            n += 1; continue
         if EIG:
             Hf = H.flatten(1); co = Hf @ Ub.T; g_ = gt.flatten() @ Ub.T; R_ = Hf - co @ Ub; rg = gt.flatten() - g_ @ Ub
             Gm += co.T[:, :, None] * co.T[:, None, :]; bm += co.T * g_[:, None]; Gr += R_ @ R_.T; br += R_ @ rg; n += 1; continue
@@ -25,6 +42,12 @@ if EIG:
     A_ = torch.linalg.solve(Gm + lam * Gm.diagonal(dim1=1, dim2=2).mean(1)[:, None, None] * I_, (bm + lam * Gm.diagonal(dim1=1, dim2=2).mean(1)[:, None] * sr)[..., None])[..., 0].T    # [K+1, 30]
     C = torch.load(out) if os.path.exists(out) else {}; C[str(K)] = {"U": Ub.float().cpu(), "A": A_.float().cpu(), "s": sr.float().cpu()}; torch.save(C, out)
     print(f"LLEFIT2 {pat} step {K + 1} mode {mode} n={n}: weight outside the embedding " + " ".join(f"{v:+.3f}" for v in sr.tolist()) + f" | last-step weight across the 30 coordinates: min {float(A_[-1].min()):+.2f} max {float(A_[-1].max()):+.2f}"); sys.exit(0)
+if STRUCT:
+    I_ = torch.eye(T_, device=dev, dtype=torch.float64); w0 = torch.linalg.solve(Gq.sum(0) + 1e-6 * Gq.sum(0).diagonal().mean() * I_, bq.sum(0)); tr = Gq.diagonal(dim1=1, dim2=2).mean(1).clamp_min(1e-12)
+    Wq = torch.linalg.solve(Gq + lam * tr[:, None, None] * I_, (bq + lam * tr[:, None] * w0)[..., None])[..., 0].T          # [terms, bins]
+    if kind == "scalar": Wq = w0[:, None].expand(T_, NB).clone()
+    C = torch.load(out) if os.path.exists(out) else {}; C[str(K)] = {"kind": "gate" if kind == "gate" else "band", "z": ZF, "W": Wq.float().cpu(), "thr": THR.float().cpu()}; torch.save(C, out)
+    print(f"LLEFIT2 {pat} step {K + 1} mode {mode} n={n}: overall " + " ".join(f"{v:+.3f}" for v in w0.tolist()) + " | last term per bin " + " ".join(f"{v:+.2f}" for v in Wq[-1].tolist()) + (" | data-fit term per bin " + " ".join(f"{v:+.2f}" for v in Wq[-2].tolist()) if ZF else "")); sys.exit(0)
 Gs = G.sum(dim=(2, 3, 4)); bs = b.sum(dim=(1, 2, 3)); w0 = torch.linalg.solve(Gs + 1e-6 * torch.eye(K + 1, device=dev, dtype=torch.float64) * Gs.diagonal().mean(), bs)
 if mode == "scalar":
     W = w0.view(K + 1, 1, 1, 1).expand(K + 1, 3, 256, 256)

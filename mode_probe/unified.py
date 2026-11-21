@@ -1198,6 +1198,12 @@ def disc_prox(P):
     return prox
 
 
+def lle_band_index(n, B, device):
+    """Radial frequency band of every 2-D FFT coefficient: band 0 below 1.5 cycles per image, then octaves."""
+    f = torch.fft.fftfreq(n, device=device) * n; r = (f[:, None] ** 2 + f[None, :] ** 2).sqrt()
+    return torch.bucketize(r, torch.tensor([1.5 * 2 ** k for k in range(B - 1)], device=device))
+
+
 def run_steps(P, model, st, sched, idx, nfe, pas=0):
     """PnP-CM outer loop over the schedule steps in idx; st carries (zt, xt, xt_m, ut, ut_m, z1)."""
     sig_t, sig_cm, rho, mom = sched
@@ -1284,9 +1290,17 @@ def run_steps(P, model, st, sched, idx, nfe, pas=0):
             hist = state.setdefault("lle_hist", [])
             if n_it == 0:
                 hist.clear()
-            STEPLOG.append((pas, 100 + n_it, xt.detach().half().cpu()))
+            STEPLOG.append((pas, 100 + n_it, xt.detach().half().cpu())); STEPLOG.append((pas, 200 + n_it, zt.detach().half().cpu()))   # model output, data-fit image
             cf = LLE_C.get(str(n_it))
-            if cf is not None and isinstance(cf, dict):         # weights per coordinate of a 30-dimensional embedding (+ one weight for the rest)
+            if cf is not None and isinstance(cf, dict) and "kind" in cf:
+                # structured combinations.  terms = earlier passed-on images (+ this step's data-fit image if cf["z"]) + this step's model output
+                stk = torch.cat(hist + ([zt.to(xt.dtype)] if cf.get("z") else []) + [xt], 0); Wc = cf["W"].to(xt.device).float()
+                if cf["kind"] == "band":        # one weight per term and radial frequency band
+                    xt = torch.fft.ifft2((Wc[:, lle_band_index(xt.shape[-1], Wc.shape[1], xt.device)][:, None] * torch.fft.fft2(stk, norm="ortho")).sum(0, keepdim=True), norm="ortho").real.clamp(-1.0, 1.0)
+                elif cf["kind"] == "gate":      # weights chosen per pixel by how much the model output moved since the previous step (nonlinear)
+                    gi = torch.bucketize((xt - hist[-1]).abs().mean(1)[0], cf["thr"].to(xt.device))
+                    xt = (Wc[:, gi][:, None] * stk).sum(0, keepdim=True).clamp(-1.0, 1.0)
+            elif cf is not None and isinstance(cf, dict):         # weights per coordinate of a 30-dimensional embedding (+ one weight for the rest)
                 Ub = cf["U"].to(xt.device); hs = torch.cat(hist + [xt], 0).flatten(1); co = hs @ Ub.T; rest = hs - co @ Ub
                 xt = ((cf["A"].to(xt.device) * co).sum(0) @ Ub + (cf["s"].to(xt.device)[:, None] * rest).sum(0)).view_as(xt).clamp(-1.0, 1.0)
             elif cf is not None and torch.is_tensor(cf):          # weight MAPS: one weight per pixel (and colour) for every image in the combination

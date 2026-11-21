@@ -11,8 +11,9 @@ def score(pat):
             gt = torch.from_numpy(np.asarray(Image.open(lab[0]).convert("RGB")).astype(np.float32) / 255).permute(2, 0, 1) * 2 - 1; x = torch.load(rf)["x_raw"][0].float()
             with torch.no_grad(): P.append(float(10 * torch.log10(1 / (((x - gt) / 2) ** 2).mean()))); Lp.append(float(lp(x[None].to(dev), gt[None].to(dev))))
     return (np.mean(P), np.mean(Lp), len(P)) if P else None
-M = [("blk8", "8x8 blocks"), ("pixs", "per pixel"), ("pix", "per pixel and colour"), ("dct30", "30 smooth maps"), ("eig30", "30-dim embedding")]
-print(f"\n## Job 2: structured extrapolation weights, {NIMG} test images, 4 calls, calibrated on generated images\n\nPSNR / LPIPS; in brackets the PSNR change against scalar weights. Masked phase retrieval is scored as produced (sign rule on).\n\n| Task | Scalar (9 numbers) | " + " | ".join(n for _, n in M) + " |\n|---|---|" + "---|" * len(M))
+NAMES = {"blk8": "8x8 blocks", "pixs": "per pixel", "pix": "per pixel and colour", "dct30": "30 smooth maps", "eig30": "30-dim embedding", "band8": "8 frequency bands", "gate": "gated by step-to-step change", "zscalar": "scalar + data-fit term", "zband8": "8 bands + data-fit term"}
+M = [(m, NAMES.get(m, m)) for m in os.environ.get("MODES", "blk8 pixs pix dct30 eig30").split() if m != "scalar"]; TITLE = os.environ.get("TITLE", "Job 2: structured extrapolation weights")
+print(f"\n## {TITLE}, {NIMG} test images, 4 calls, calibrated on generated images\n\nPSNR / LPIPS; in brackets the PSNR change against scalar weights. Masked phase retrieval is scored as produced (sign rule on).\n\n| Task | Scalar (9 numbers) | " + " | ".join(n for _, n in M) + " |\n|---|---|" + "---|" * len(M))
 for t, deg in [("sr_bicubic", "sr_bicubic"), ("deblur_gauss", "deblur_gauss"), ("inpainting", "inpainting"), ("jpeg", "jpeg"), ("jpegtrue", "jpeg"), ("deblur_nl", "deblur_nl"), ("hdr", "deblur_nl"), ("quant", "deblur_nl"), ("onebit", "deblur_nl"), ("prmask", "phase_retrieval")]:
     s = score(f"{TAG}test_scalar_{t}_{deg}")
     if not s: continue

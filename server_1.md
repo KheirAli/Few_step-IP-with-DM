@@ -79,6 +79,29 @@ cd ../PnP-CM && ../pnpcm_env/bin/python ../mode_probe/score_llew.py >> ../server
 
 Server 2 is running the same experiment slowly on shared GPUs; whichever finishes first is used and the other is a cross-check.
 
-## Job 3: (will be added here by server 2)
+## Job 3: statistical and nonlinear versions of the combination (run this BEFORE or in parallel with Job 2 if GPUs allow: it is the more promising one)
 
-Planned: weights that depend on how well each coordinate is measured (clipped or not, masked or not, singular-value band) instead of on position. Code not written yet. Check this file again after Job 2 with `git pull`.
+Four new versions against scalar weights, same protocol as Job 2 (512 generated calibration images, 107 test images, 10 tasks, 4 calls):
+
+| Version | What it does |
+|---|---|
+| `band8` | one weight per term and per radial frequency band (8 octave bands): the error of each step differs by frequency |
+| `gate` | nonlinear: weights chosen per pixel from how much the model output changed since the previous step (6 levels) |
+| `zscalar` | scalar weights, but the step's data-fit image (which agrees with the measurement) is added as a term |
+| `zband8` | `band8` with the data-fit image as a term: measurement-aware and frequency-aware |
+
+```bash
+git pull
+cd mode_probe
+TAG=j3 MODES="scalar band8 gate zscalar zband8" NGPU=<number of GPUs> ./launch_llew.sh > logs_x/launch_j3.log 2>&1
+grep LLEFIT2 logs_x/launch_j3.log > logs_x/j3_fits.txt
+cd ../PnP-CM && TAG=j3 MODES="scalar band8 gate zscalar zband8" TITLE="Job 3: frequency-band, gated and data-fit-term combinations" ../pnpcm_env/bin/python ../mode_probe/score_llew.py >> ../server1_results.md
+```
+
+- About 55,000 sampler runs; roughly 30 to 50 minutes on 8 free GPUs. Same memory and disk notes as Job 2. Needs no extra files.
+- Append `logs_x/j3_fits.txt` to `server1_results.md` in a code block.
+- Smoke test on server 2 (24 calibration images, 12 test images, so only indicative): HDR scalar 25.09 -> band8 25.48, gate 25.64, zscalar 25.48, zband8 25.74; SR 27.90 -> 28.00, 27.92, 27.86, 28.05.
+
+## Job 4: (will be added here by server 2)
+
+Check this file again with `git pull` after Job 3.
