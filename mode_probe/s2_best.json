@@ -1,0 +1,1 @@
+{"sr_bicubic": "p0_1", "deblur_gauss": "p0_1", "inpainting": "p0_1", "jpeg": "p0_15", "jpegtrue": "p0_3", "deblur_nl": "p0_3", "prmask": "p05_2", "hdr": "p05_25", "quant": "p1_3", "onebit": "p05_25"}

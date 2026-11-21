@@ -1,0 +1,1 @@
+{"sr_bicubic": "twice", "deblur_gauss": "early", "inpainting": "even", "jpeg": "even", "jpegtrue": "hold", "deblur_nl": "hold", "prmask": "interleave", "hdr": "twice", "quant": "hold", "onebit": "twice"}

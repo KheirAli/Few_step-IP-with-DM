@@ -1,0 +1,1 @@
+{"sr_bicubic": "base", "deblur_gauss": "base", "inpainting": "fw05", "jpeg": "fw05", "jpegtrue": "base", "deblur_nl": "fw05k12", "prmask": "fw05", "hdr": "rx2", "quant": "fw05k12", "onebit": "fw05"}

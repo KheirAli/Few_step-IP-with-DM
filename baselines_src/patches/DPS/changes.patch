@@ -1,0 +1,45 @@
+diff --git a/guided_diffusion/measurements.py b/guided_diffusion/measurements.py
+index fdd6e68..b9a51c6 100644
+--- a/guided_diffusion/measurements.py
++++ b/guided_diffusion/measurements.py
+@@ -287,4 +287,24 @@ class PoissonNoise(Noise):
+         # if low_clip == -1:
+         #     data = data * (old_max + 1.0) - 1.0
+        
+-        # return data.clamp(low_clip, 1.0)
+\ No newline at end of file
++        # return data.clamp(low_clip, 1.0)
++
++# ---- added 2026-11-18: extra tasks (see ../extra_ops.py) ----
++import sys as _sys
++_sys.path.append('/usr/scratch/akheirandish3/PNP/baselines_src')
++import extra_ops as _EO
++
++
++def _mk_extra(name, fn):
++    @register_operator(name=name)
++    class _Extra(NonLinearOperator):
++        def __init__(self, device=None, **kw):
++            self.device = device
++
++        def forward(self, data, **kwargs):
++            return fn(data)
++    return _Extra
++
++
++for _n, _f in _EO.OPS.items():
++    _mk_extra(_n, _f)
+diff --git a/sample_condition.py b/sample_condition.py
+index 94b27b3..ec31dc3 100644
+--- a/sample_condition.py
++++ b/sample_condition.py
+@@ -49,6 +49,9 @@ def main():
+     
+     # Load model
+     model = create_model(**model_config)
++    if os.environ.get("CELEBA_HF", "0") == "1":                 # prior trained on CelebA-HQ instead of FFHQ (see ../hf_wrap.py)
++        import sys as _s; _s.path.append('/usr/scratch/akheirandish3/PNP/baselines_src'); from hf_wrap import HFEps
++        model = HFEps()
+     model = model.to(device)
+     model.eval()
+ 

@@ -1,0 +1,57 @@
+diff --git a/forward_operator/__init__.py b/forward_operator/__init__.py
+index b52f739..607859d 100644
+--- a/forward_operator/__init__.py
++++ b/forward_operator/__init__.py
+@@ -404,4 +404,24 @@ class LatentWrapper(Operator):
+             return pred_grad, loss
+         else:
+             return pred_grad
+-        
+\ No newline at end of file
++        
++
++# ---- added 2026-11-18: extra tasks (see ../extra_ops.py) ----
++import sys as _sys
++_sys.path.append('/usr/scratch/akheirandish3/PNP/baselines_src')
++import extra_ops as _EO
++
++
++def _mk_extra(name, fn):
++    @register_operator(name=name)
++    class _Extra(Operator):
++        def __init__(self, sigma=0.05, **kw):
++            super().__init__(sigma)
++
++        def __call__(self, x):
++            return fn(x)
++    return _Extra
++
++
++for _n, _f in _EO.OPS.items():
++    _mk_extra(_n, _f)
+diff --git a/model/__init__.py b/model/__init__.py
+index 0575dcd..ad44f0a 100644
+--- a/model/__init__.py
++++ b/model/__init__.py
+@@ -308,4 +308,19 @@ class StableDiffusionModel(LatentDiffusionModel):
+             1, num_channels_latents, self.resolution, self.resolution, self.dtype, self.device, None, None
+         )
+         return latents.shape[1:]
+-    
+\ No newline at end of file
++    
++
++# ---- added 2026-11-20: CelebA-HQ pixel diffusion prior (see ../hf_wrap.py) ----
++@register_model(name='ddpm_hf')
++class DDPMHF(DiffusionModel):
++    def __init__(self, model_config=None, device='cuda', requires_grad=False, **kw):
++        super().__init__()
++        import sys as _s; _s.path.append('/usr/scratch/akheirandish3/PNP/baselines_src'); from hf_wrap import HFEps
++        self.model = VPPrecond(model=HFEps(), learn_sigma=False, conditional=False).to(device)
++        self.model.eval(); self.model.requires_grad_(requires_grad); self.image_size = 256
++
++    def tweedie(self, x, sigma):
++        return self.model(x, torch.as_tensor(sigma).to(x.device))
++
++    def get_in_shape(self):
++        return (3, self.image_size, self.image_size)
