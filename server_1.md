@@ -50,6 +50,35 @@ cd ../PnP-CM && ../pnpcm_env/bin/python ../mode_probe/score_seeds.py >> ../serve
 - Needs the masks and kernels under `PnP-CM/exp/` (inpainting, nonlinear deblur) and the `bkse` weights (nonlinear deblur). If those are missing, run the other tasks with `TASKS="sr_bicubic deblur_gauss jpeg hdr quant onebit prmask"` and report which were skipped.
 - If a task errors, give the last 20 lines of `logs_x/seed<seed>_<task>_<start>.out` in `server2.md`.
 
-## Job 2: (will be added here by server 2)
+## Job 2: the new ideas — extrapolation weights that vary over the image or over a 30-dimensional embedding
 
-Check this file again after Job 1 with `git pull`.
+The current method combines the outputs of the 4 steps with one weight per image ("scalar", 9 numbers per task).
+This job tests whether structured weights do better. Six versions, all calibrated on the same 512 model-generated images, tested on the 107 test images, 10 tasks:
+
+| Version | Weights |
+|---|---|
+| `scalar` | one per image in the combination (reference) |
+| `blk8` | one per 8x8 block, interpolated |
+| `pixs` | one per pixel, shared by the colours |
+| `pix` | one per pixel and colour |
+| `dct30` | weight maps built from the 30 smoothest cosine patterns |
+| `eig30` | one weight per coordinate of a 30-dimensional face embedding (eigenfaces of model samples), one for the remainder |
+
+```bash
+cd mode_probe
+NGPU=<number of GPUs> ./launch_llew.sh > logs_x/launch_llew.log 2>&1      # prints ALLDONE at the end
+grep LLEFIT2 logs_x/launch_llew.log > logs_x/llew_fits.txt                # the fitted weights, one line per task / version / step
+cd ../PnP-CM && ../pnpcm_env/bin/python ../mode_probe/score_llew.py >> ../server1_results.md
+```
+
+- Needs `mode_probe/lle/eig30_basis.pt` (in the transferred `pnp_large.tar`).
+- Size: about 71,000 sampler runs (round 1 is shared by all versions; rounds 2 and 3 and the test are per version). At 0.3 s per image and two jobs per GPU: roughly 40 to 60 minutes on 8 free GPUs. Each job uses 3 to 4 GB of GPU memory; raise `PAR` if the GPUs are large and free (e.g. `PAR=32`).
+- Disk: each calibration round writes up to about 60 GB under `mode_probe/exp_fin_llewcal*` and deletes it after the fit. Make sure that much is free.
+- Also append `logs_x/llew_fits.txt` to `server1_results.md` (in a code block): the fitted weights are part of the result.
+- If one version or task fails, report it and keep the rest; subsets can be rerun with `TASKS="..." MODES="..."` (use another `TAG=` so finished runs are not deleted).
+
+Server 2 is running the same experiment slowly on shared GPUs; whichever finishes first is used and the other is a cross-check.
+
+## Job 3: (will be added here by server 2)
+
+Planned: weights that depend on how well each coordinate is measured (clipped or not, masked or not, singular-value band) instead of on position. Code not written yet. Check this file again after Job 2 with `git pull`.
