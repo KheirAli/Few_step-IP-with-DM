@@ -97,3 +97,16 @@ The masked phase-retrieval row is NOT valid: the fit did not align the channel s
 | Gaussian deblur | 28.36 | 28.44 | 28.36 | 28.02 (c=1) |
 
 Scripts: sched_search.py, sched_cd.py, sched_rule.py; schedules in sched_search_<task>.json / sched_cd_<task>.json. Masked phase retrieval with sign-aligned fit: scalar 27.48/0.300, band8 27.87/0.276, zband8 27.93/0.271.
+
+# Schedule tuned WITH the combination in the objective, for 4 / 3 / 2 calls (2026-11-22)
+
+sched_cd2.py (19 / 15 / 11 runs per task on generated images), then in-loop zband8 weights (128 generated images) and the 107 test images. PSNR / LPIPS.
+
+| Task | Previous best, 4 calls | Tuned, 4 calls | Tuned, 3 calls | Tuned, 2 calls |
+|---|---|---|---|---|
+| hdr | 26.32/0.263 | 26.42/0.268 | 25.61/0.289 | 24.55/0.285 |
+| quant | 31.46/0.177 | 31.31/0.182 | 31.14/0.185 | 30.94/0.199 |
+| onebit | 30.30/0.213 | 30.30/0.213 | 29.76/0.220 | 29.18/0.249 |
+| sr_bicubic | 28.12/0.303 | 28.28/0.297 | 28.18/0.305 | 28.11/0.308 |
+| inpainting | 30.23/0.198 | 30.29/0.207 | 29.79/0.221 | 29.19/0.260 |
+| deblur_gauss | 29.67/0.253 | 29.76/0.263 | 29.44/0.274 | 29.02/0.276 |
