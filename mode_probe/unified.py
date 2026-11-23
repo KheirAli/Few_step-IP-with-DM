@@ -476,6 +476,9 @@ class _CTOp:
     forward = A
 
 
+_CTSVD = {}
+
+
 def ct_prox(y, n_cg=None):
     """EXACT data-fit for the linear CT operator: (A'A + rho I) z = A'y + rho v by conjugate gradients (no learning rate).
     A'A is applied with one forward projection and one back-projection (automatic differentiation of the projector)."""
@@ -484,6 +487,18 @@ def ct_prox(y, n_cg=None):
     def At(r, like):
         with torch.enable_grad():
             z_ = torch.zeros_like(like).requires_grad_(True); return torch.autograd.grad((_radon(z_) * r).sum(), z_)[0]
+
+    if os.environ.get("CT_SVD", "0") == "1":
+        # closed form with the precomputed decomposition of the operator (ct_svd.py, once per geometry): no iterations.
+        # (A'A + rho I) z = A'y + rho v   =>   in the basis V:  z_V = (V'A'y + rho v_V) / (s^2 + rho);  outside it z = v.
+        if "V" not in _CTSVD:
+            d_ = torch.load(os.path.abspath(f"../mode_probe/ct_svd_{CT_K}.pt")); _CTSVD["V"] = d_["V"].to(y.device); _CTSVD["s2"] = (d_["s"].to(y.device) ** 2)
+        V_, s2_ = _CTSVD["V"], _CTSVD["s2"]; cy = At(y, torch.zeros(1, 3, 256, 256, device=y.device)).reshape(3, -1) @ V_      # [3, r]
+
+        def prox_svd(v, rho):
+            rho = float(rho); vv = v.reshape(3, -1).to(V_.dtype) @ V_
+            return (v.reshape(3, -1) + ((cy + rho * vv) / (s2_ + rho) - vv) @ V_.T).reshape(v.shape).to(v.dtype)
+        return prox_svd
 
     def prox(v, rho):
         rho = float(rho); b = At(y, v) + rho * v; op = lambda z_: At(_radon(z_), v) + rho * z_
@@ -494,6 +509,65 @@ def ct_prox(y, n_cg=None):
                 break
             p_ = r + (rn / rs) * p_; rs = rn
         return z
+    return prox
+
+
+# ---- NONLINEAR CT (2026-11-23): raw transmission measurements  y = G (1 - exp(-s)),  s = alpha * Radon((x+1)/2)  (Beer-Lambert law;
+# the model of Fridovich-Keil et al., "Gradient descent provably solves nonlinear tomographic reconstruction", arXiv 2310.03956).
+# G only sets the noise level: the framework adds noise 0.1 to y, i.e. 0.1/G on the transmission scale (G=10 -> 0.01).
+CT_ALPHA = float(os.environ.get("CT_ALPHA", "0.25")); CT_GAIN = float(os.environ.get("CT_GAIN", "10")); CTNL_MODE = os.environ.get("CTNL_MODE", "split")
+
+
+class _CTNLOp(_CTOp):
+    def A(self, x, **k):
+        return CT_GAIN * (1.0 - torch.exp(-CT_ALPHA * _radon((x + 1) / 2)))
+    forward = A
+
+
+def ctnl_ray_fit(y):
+    """EXACT per-ray minimiser of (1/2)(G(1-e^{-s}) - y)^2 + (mu/2)(s - p)^2 over s >= 0.  The scalar problem is not convex, so the global
+    minimiser is found the same way as for clipping / quantisation: evaluate candidates (a grid plus p itself), keep the best, polish with Newton."""
+    grid = torch.linspace(0.0, 8.0, 65, device=y.device).view(65, 1, 1, 1, 1)
+
+    def pw(p, mu):
+        mu = float(mu); c = torch.cat([grid.expand(65, *p.shape), p.clamp(min=0)[None]], 0)
+        obj = 0.5 * (CT_GAIN * (1 - torch.exp(-c)) - y[None]) ** 2 + 0.5 * mu * (c - p[None]) ** 2
+        sb = torch.gather(c, 0, obj.argmin(0, keepdim=True))[0]
+        for _ in range(6):
+            e = torch.exp(-sb); g = CT_GAIN * e * (CT_GAIN * (1 - e) - y) + mu * (sb - p); h = CT_GAIN * e * (2 * CT_GAIN * e - CT_GAIN + y) + mu
+            sb = (sb - (g / h.clamp(min=0.25 * mu)).clamp(-0.07, 0.07)).clamp(min=0.0)
+        return sb
+    return pw
+
+
+def ctnl_prox(y, n=8):
+    """Data-fit for 'Radon transform, then the exponential attenuation law':  min (1/2)|G(1-exp(-L z)) - y|^2 + (rho/2)|z - v|^2,  L z = alpha Radon((z+1)/2).
+    Alternates two closed forms, as split_prox does for 'blur then pointwise': the per-ray formula above on w ~ L z, and the exact linear formula for z
+    (precomputed decomposition of the Radon operator, ct_svd.py).  No model calls, no step size, no gradient of the nonlinearity.
+    CTNL_MODE=log : the conventional alternative - undo the exponential by a logarithm once, then the LINEAR closed form (pre-processing baseline)."""
+    if "V" not in _CTSVD:
+        d_ = torch.load(os.path.abspath(f"../mode_probe/ct_svd_{CT_K}.pt")); _CTSVD["V"] = d_["V"].to(y.device); _CTSVD["s2"] = (d_["s"].to(y.device) ** 2)
+    V_, s2_ = _CTSVD["V"], _CTSVD["s2"]; h = CT_ALPHA / 2; b2 = h * h * s2_; c0 = h * _radon(torch.ones(1, 3, 256, 256, device=y.device)); pw = ctnl_ray_fit(y)
+
+    def Atv(r):                                                   # V' A' r  (one back-projection)
+        with torch.enable_grad():
+            z_ = torch.zeros(1, 3, 256, 256, device=y.device, requires_grad=True); g_ = torch.autograd.grad((_radon(z_) * r).sum(), z_)[0]
+        return g_.reshape(3, -1) @ V_
+
+    def lin(w, v, mu, rho):                                       # argmin (mu/2)|h A z + c0 - w|^2 + (rho/2)|z - v|^2
+        vv = v.reshape(3, -1).to(V_.dtype) @ V_
+        return (v.reshape(3, -1) + ((mu * h * Atv(w - c0) + rho * vv) / (mu * b2 + rho) - vv) @ V_.T).reshape(v.shape).to(v.dtype)
+    plog = -torch.log((1.0 - y / CT_GAIN).clamp(min=math.exp(-8.0), max=1.0))      # log pre-processing of the raw data
+
+    def prox(v, rho):
+        rho = float(rho)
+        if CTNL_MODE == "log":
+            return lin(plog, v, 1.0, rho / CT_GAIN ** 2)
+        z = v.clone()
+        for mu in [0.5 * (64.0 ** (i_ / max(n - 1, 1))) for i_ in range(n)]:
+            z = lin(pw(CT_ALPHA * _radon((z + 1) / 2), mu), v, mu, rho)
+        return z
+    prox.start = lambda r0: lin(plog, torch.zeros(1, 3, 256, 256, device=y.device), 1.0, r0)
     return prox
 
 
@@ -530,11 +604,11 @@ def mri_prox(y):
     return prox
 
 
-_OPS = {"prdaps": _PRDapsOp, "hdr": _HDROp, "quant": _QuantOp, "onebit": _OneBitOp, "blind": _BlindOp, "haze": _HazeOp, "ct": _CTOp, "mri": _MRIOp,
+_OPS = {"prdaps": _PRDapsOp, "hdr": _HDROp, "quant": _QuantOp, "onebit": _OneBitOp, "blind": _BlindOp, "haze": _HazeOp, "ct": _CTOp, "mri": _MRIOp, "ctnl": None,
         "gamma": _GammaOp, "mod": _ModOp, "blurclip": _BlurClipOp, "blurq": _BlurQOp}
 if NEWOP:
     import functions.measurements as _FMM
-    _FMM.NonlinearBlurOperator = _OPS[NEWOP]
+    _FMM.NonlinearBlurOperator = _OPS[NEWOP] if NEWOP != "ctnl" else _CTNLOp
 
 
 def quant_prox(y):
@@ -1901,11 +1975,13 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
                 rec["psnr_all"] = [r_[1]["psnr"] for r_ in runs]; rec["psnr_avg"] = _ps(torch.stack([r_[0] for r_ in runs]).mean(0), gt_)
         torch.cuda.synchronize(); rec["time_total"] = time.time() - t_entry
         return finish(x, rec, xf)
-    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri") and (SOLVER != "repo" or NEWOP == "ct"):
+    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri", "ctnl") and (SOLVER != "repo" or NEWOP == "ct"):
         if NEWOP == "mri":
             Pb.prox = mri_prox(y); w0 = torch.fft.ifft2(_mri_mask(dev) * torch.complex(y[..., :256], y[..., 256:]), norm="ortho").real.clamp(-1.0, 1.0)   # start: zero-filled
         elif NEWOP == "ct":
             Pb.prox = ct_prox(y); w0 = ct_prox(y, 40)(torch.zeros(1, 3, 256, 256, device=dev), float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: regularised least squares, no model
+        elif NEWOP == "ctnl":
+            Pb.prox = ctnl_prox(y); w0 = Pb.prox.start(float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: logarithm + regularised least squares
         elif NEWOP == "quant":
             Pb.prox = quant_prox(y); w0 = y.clamp(-1.0, 1.0)
         elif NEWOP == "gamma":
