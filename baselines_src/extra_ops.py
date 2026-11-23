@@ -85,5 +85,13 @@ def ct30(x):
     return _radon(x, 30)
 
 
+def ctnl60(x):                                                  # nonlinear CT (Beer-Lambert), identical to mode_probe/unified.py NEWOP=ctnl: gain 10, alpha 0.25
+    return 10.0 * (1.0 - torch.exp(-0.25 * _radon((x + 1) / 2, 60)))
+
+
+def ctnl30(x):
+    return 10.0 * (1.0 - torch.exp(-0.25 * _radon((x + 1) / 2, 30)))
+
+
 OPS = {"jpeg5": jpeg5, "quant8": quant8, "onebit": onebit, "hdr2": hdr, "pr_masked": pr_masked,
-       "gamma04": gamma04, "wrap2": wrap2, "blurclip": blurclip, "blurq": blurq, "ct60": ct60, "ct30": ct30}
+       "gamma04": gamma04, "wrap2": wrap2, "blurclip": blurclip, "blurq": blurq, "ct60": ct60, "ct30": ct30, "ctnl60": ctnl60, "ctnl30": ctnl30}

@@ -1975,7 +1975,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
                 rec["psnr_all"] = [r_[1]["psnr"] for r_ in runs]; rec["psnr_avg"] = _ps(torch.stack([r_[0] for r_ in runs]).mean(0), gt_)
         torch.cuda.synchronize(); rec["time_total"] = time.time() - t_entry
         return finish(x, rec, xf)
-    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri", "ctnl") and (SOLVER != "repo" or NEWOP == "ct"):
+    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri", "ctnl") and (SOLVER != "repo" or NEWOP in ("ct", "ctnl")):
         if NEWOP == "mri":
             Pb.prox = mri_prox(y); w0 = torch.fft.ifft2(_mri_mask(dev) * torch.complex(y[..., :256], y[..., 256:]), norm="ortho").real.clamp(-1.0, 1.0)   # start: zero-filled
         elif NEWOP == "ct":
