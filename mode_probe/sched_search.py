@@ -8,7 +8,8 @@ task = sys.argv[1]; NI = int(sys.argv[2]) if len(sys.argv) > 2 else 48; PAR = in
 CFG = {"sr_bicubic": ("sr_bicubic", "LINEXACT=1", [0.465, 0.245, 0.01, 0.01]), "deblur_gauss": ("deblur_gauss", "LINEXACT=1", [0.327, 0.132, 0.01, 0.01]),
        "inpainting": ("inpainting", "LINEXACT=1 FW=1 FWP=0.5", [0.327, 0.132, 0.01, 0.01]), "jpeg": ("jpeg", "JPROJ=1 JSOFT=1 JCOLD=1 FW=1 FWP=0.5 FWSTEPS=1,2,3", [0.694, 0.571, 0.351, 0.01]),
        "hdr": ("deblur_nl", "NEWOP=hdr HDRX=1", [0.694, 0.635, 0.56, 0.459]), "quant": ("deblur_nl", "NEWOP=quant FW=1 FWP=0.5 FWMIN=0.4", [0.694, 0.635, 0.56, 0.459]),
-       "onebit": ("deblur_nl", "NEWOP=onebit OBMEAN=1.0,0.5,0.3,0.2 FW=1 FWP=0.5 FWMIN=0.4", [0.694, 0.635, 0.56, 0.459])}
+       "onebit": ("deblur_nl", "NEWOP=onebit OBMEAN=1.0,0.5,0.3,0.2 FW=1 FWP=0.5 FWMIN=0.4", [0.694, 0.635, 0.56, 0.459]),
+       **{f"ctnl{K}r{r}": ("deblur_nl", f"NEWOP=ctnl CT_K={K} RHOX={r}", [0.5, 0.25, 0.1, 0.02]) for K in (30, 60) for r in ("0.1", "0.3", "1")}}
 deg, extra, base = CFG[task]; rng = np.random.default_rng(0); DATA = os.path.realpath(f"{L}/data_gen512")
 def psnr_of(tag, data_n):
     P = []

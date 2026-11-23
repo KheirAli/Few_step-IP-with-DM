@@ -36,7 +36,7 @@ def run(cands, name, data=DATA, n=NI):
     for tag, N, p in pr: p.wait(); out.append(score(tag, n, N)); shutil.rmtree(f"{L}/exp_fin_{tag}_s0", ignore_errors=True)
     return out
 res = {}
-for N, pos in ((4, [0, 1, 2, 3]), (3, [0, 1.5, 3]), (2, [0, 3])):
+for N, pos in [c_ for c_ in ((4, [0, 1, 2, 3]), (3, [0, 1.5, 3]), (2, [0, 3])) if str(c_[0]) in os.environ.get("NSTEPS", "4,3,2").split(",")]:
     cur = ([float(np.interp(p, [0, 1, 2, 3], base)) for p in pos], 1.2, pos); b0 = run([cur], f"n{N}b")[0]; best = b0[0]; nr = 1
     for k in range(N):
         cs = []

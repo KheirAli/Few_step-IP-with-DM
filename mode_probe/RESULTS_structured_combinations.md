@@ -110,3 +110,22 @@ sched_cd2.py (19 / 15 / 11 runs per task on generated images), then in-loop zban
 | sr_bicubic | 28.12/0.303 | 28.28/0.297 | 28.18/0.305 | 28.11/0.308 |
 | inpainting | 30.23/0.198 | 30.29/0.207 | 29.79/0.221 | 29.19/0.260 |
 | deblur_gauss | 29.67/0.253 | 29.76/0.263 | 29.44/0.274 | 29.02/0.276 |
+
+# CT (2026-11-23)
+
+Linear CT: data-fit in closed form from a precomputed decomposition of the Radon operator (`ct_svd.py`, `CT_SVD=1`): 29.20/0.255 (30 views), 31.50/0.200 (60 views), within 0.002 dB of the conjugate-gradient version on every test image; 0.21 s per image.
+
+Nonlinear CT, y = 1 - exp(-s) + noise 0.01 (`NEWOP=ctnl`), 107 test images, PSNR / LPIPS. Ours: penalty, schedule and combination weights all chosen on model-generated images (`ctnl_full.py`).
+
+| Method | Calls | 30 views | 60 views |
+|---|---|---|---|
+| Logarithm, then linear closed form | 4 | 24.20/0.421 | 25.53/0.405 |
+| PnP-CM, learning rate tuned | 4 | 23.93/0.355 | 25.24/0.326 |
+| Ours, untuned | 4 | 25.99/0.356 | 26.93/0.351 |
+| Ours, tuned, scalar extrapolation | 4 | 27.01/0.279 | 28.15/0.249 |
+| Ours, tuned, 8 bands + data-fit term | 4 | 27.62/0.278 | 28.87/0.246 |
+| DPS, CelebA-HQ prior | 1000 | 24.15/0.278 | 24.80/0.270 |
+| DAPS, CelebA-HQ prior | ~1000 | 27.65/0.264 | 28.55/0.254 |
+
+Statistical ideas (`three_ideas.py`, tuned on generated images): expected-value update on blur-then-clip 22.49/0.446 -> 23.62/0.433; on nonlinear CT no effect; eigenface regression start for HDR negative; Poisson CT (1000 photons, 30 views) Lambert-W update 25.33/0.363 vs logarithm of counts 24.77/0.372.
+Hessian commutator (relative): linear CT 0.0000, nonlinear CT 0.017 (Gaussian loss), 0.056 (Poisson loss).

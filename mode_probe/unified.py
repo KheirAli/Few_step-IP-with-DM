@@ -220,6 +220,21 @@ def prd_setup(y):
         # noise-aware data-fit: the EXACT minimiser, per Fourier coefficient, of (1/2)(|c| - y)^2 + (rho'/2)|c - u|^2.
         # The magnitude moves only part of the way to the (noisy) measurement; the phase is kept.  One FFT pair.
         g = torch.nn.functional.pad((img * 0.5 + 0.5), (64, 64, 64, 64)); G = _FU.fft2_m(g); r4 = 4.0 * float(rho)
+        n_ad = int(os.environ.get("PRD_ADMM", "0"))
+        if n_ad:
+            # The step below ("fit every coefficient, transform back, crop") is ONE splitting step, not the exact data-fit: the padded transform is
+            # redundant.  PRD_ADMM=n runs n inner ADMM iterations on the true problem  min_x (1/2)||Tx| - a|^2 + (r/2)|x - v|^2  (u = Tx split;
+            # coefficient update = the same closed form, image update = a weighted average, dual update).  No model calls.
+            ra = r4 * float(os.environ.get("PRD_RMUL", "1")); be = ra * float(os.environ.get("PRD_BETA", "1")); gx = g.clone(); d_ = torch.zeros_like(G)
+            Jf = lambda q: float(0.5 * ((_FU.fft2_m(q).abs() - amp) ** 2).sum() + 0.5 * ra * ((q - g) ** 2).sum())
+            if os.environ.get("PRD_JLOG", "0") == "1":
+                u1 = G / (G.abs() + 1e-8) * (amp + ra * G.abs()) / (1 + ra); j1 = Jf(_FU.ifft2_m(u1).real * S)
+            for _ in range(n_ad):
+                w_ = _FU.fft2_m(gx) - d_; u_ = w_ / (w_.abs() + 1e-8) * (amp + be * w_.abs()) / (1 + be)
+                gx = (be * (_FU.ifft2_m(u_ + d_).real * S) + ra * g) / (be + ra); d_ = d_ + u_ - _FU.fft2_m(gx)
+            if os.environ.get("PRD_JLOG", "0") == "1":
+                state.setdefault("prdJ", []).append([Jf(g), j1, Jf(gx)])
+            return gx[..., 64:320, 64:320].clamp(0, 1) * 2 - 1
         mag = (amp + r4 * G.abs()) / (1 + r4)
         ev_ = os.environ.get("PRD_EV", "")
         if ev_:
@@ -442,6 +457,22 @@ def mod_prox(y):
     return prox
 
 
+def ev_fit(f, y, lo=None):
+    """STATISTICAL scalar update for 'linear, then a per-coordinate function f':  instead of the minimiser of
+    (1/2)(f(s) - y)^2 + (mu/2)(s - p)^2  it returns the MEAN of the density exp(-objective / T), T = SPLIT_EV * sigma_y^2  (the posterior mean of s
+    under the belief N(p, T/mu) and the measurement y).  One number per coordinate, by quadrature on 41 points around p; still fully separable.
+    This is the one-bit expected-value fit extended to any f: where the measurement is one-sided (clipped) the mean moves off the boundary."""
+    T = SPLIT_EV * SIGY ** 2; d = torch.linspace(-4.0, 4.0, 41, device=y.device).view(41, 1, 1, 1, 1)
+
+    def pw(p, mu):
+        mu = float(mu); c = p[None] + d * (T / mu) ** 0.5
+        if lo is not None:
+            c = c.clamp(min=lo)
+        ob = (0.5 * (f(c) - y[None]) ** 2 + 0.5 * mu * (c - p[None]) ** 2) / T; w = torch.exp(-(ob - ob.min(0, keepdim=True)[0]))
+        return (w * c).sum(0) / w.sum(0)
+    return pw
+
+
 def split_prox(pw, n=8):
     """Data-fit for 'Gaussian blur, then a pointwise nonlinearity':  min (1/2)|f(Hz) - y|^2 + (rho/2)|z - v|^2.
     Alternates two CLOSED FORMS: the pointwise formula on w ~ Hz, and the linear (Fourier-diagonal) formula for z.  No model calls."""
@@ -476,7 +507,7 @@ class _CTOp:
     forward = A
 
 
-_CTSVD = {}
+_CTSVD = {}; _HDRREG = {}
 
 
 def ct_prox(y, n_cg=None):
@@ -518,8 +549,13 @@ def ct_prox(y, n_cg=None):
 CT_ALPHA = float(os.environ.get("CT_ALPHA", "0.25")); CT_GAIN = float(os.environ.get("CT_GAIN", "10")); CTNL_MODE = os.environ.get("CTNL_MODE", "split")
 
 
+CT_I0 = float(os.environ.get("CT_I0", "1000"))
+
+
 class _CTNLOp(_CTOp):
     def A(self, x, **k):
+        if CTNL_MODE in ("poisson", "poislog"):
+            return CT_I0 * torch.exp(-CT_ALPHA * _radon((x + 1) / 2))      # mean photon count per ray; Poisson sampling is applied to the measurement
         return CT_GAIN * (1.0 - torch.exp(-CT_ALPHA * _radon((x + 1) / 2)))
     forward = A
 
@@ -548,6 +584,17 @@ def ctnl_prox(y, n=8):
     if "V" not in _CTSVD:
         d_ = torch.load(os.path.abspath(f"../mode_probe/ct_svd_{CT_K}.pt")); _CTSVD["V"] = d_["V"].to(y.device); _CTSVD["s2"] = (d_["s"].to(y.device) ** 2)
     V_, s2_ = _CTSVD["V"], _CTSVD["s2"]; h = CT_ALPHA / 2; b2 = h * h * s2_; c0 = h * _radon(torch.ones(1, 3, 256, 256, device=y.device)); pw = ctnl_ray_fit(y)
+    if SPLIT_EV > 0:
+        pw = ev_fit(lambda s_: CT_GAIN * (1 - torch.exp(-s_)), y, lo=0.0)
+    if CTNL_MODE == "poisson":
+        # photon counts n ~ Poisson(I0 exp(-s)).  Per-ray update of  c (I0 e^{-s} + n s) + (mu/2)(s - p)^2  in CLOSED FORM with the Lambert W function
+        # (c = sigma_y^2 puts the exact negative log-likelihood on the scale the penalty assumes):  s = p - c n/mu + W0((c I0/mu) exp(-p + c n/mu)).
+        from scipy.special import lambertw as _lw; import numpy as _npx
+        cc = SIGY ** 2; n_ = y
+
+        def pw(p, mu):
+            mu = float(mu); a_ = (p - cc * n_ / mu).double().cpu().numpy()
+            return (torch.from_numpy(a_ + _lw((cc * CT_I0 / mu) * _npx.exp(-a_)).real).to(p.device).to(p.dtype)).clamp(min=0.0)
 
     def Atv(r):                                                   # V' A' r  (one back-projection)
         with torch.enable_grad():
@@ -558,11 +605,15 @@ def ctnl_prox(y, n=8):
         vv = v.reshape(3, -1).to(V_.dtype) @ V_
         return (v.reshape(3, -1) + ((mu * h * Atv(w - c0) + rho * vv) / (mu * b2 + rho) - vv) @ V_.T).reshape(v.shape).to(v.dtype)
     plog = -torch.log((1.0 - y / CT_GAIN).clamp(min=math.exp(-8.0), max=1.0))      # log pre-processing of the raw data
+    if CTNL_MODE in ("poisson", "poislog"):
+        plog = -torch.log((y.clamp(min=0.5) / CT_I0).clamp(max=1.0))
 
     def prox(v, rho):
         rho = float(rho)
         if CTNL_MODE == "log":
             return lin(plog, v, 1.0, rho / CT_GAIN ** 2)
+        if CTNL_MODE == "poislog":                               # baseline: logarithm of the counts, then the linear closed form
+            return lin(plog, v, 1.0, rho / CT_I0)
         z = v.clone()
         for mu in [0.5 * (64.0 ** (i_ / max(n - 1, 1))) for i_ in range(n)]:
             z = lin(pw(CT_ALPHA * _radon((z + 1) / 2), mu), v, mu, rho)
@@ -1015,7 +1066,7 @@ import torch.nn.functional as Fn
 
 # EQ: random transform before the model call, undone after it (equivariant plug-and-play, Terris et al. 2024), so that a structured
 # input error does not line up with the model in the same way at every step.  EQ=flip | shift<S> (circular shift up to S pixels) | flipshift<S>
-NREUSE = float(os.environ.get("NREUSE", "0")); EQ = os.environ.get("EQ", ""); DIAG3 = os.environ.get("DIAG3", "0") == "1"
+NREUSE = float(os.environ.get("NREUSE", "0")); SPLIT_EV = float(os.environ.get("SPLIT_EV", "0")); EQ = os.environ.get("EQ", ""); DIAG3 = os.environ.get("DIAG3", "0") == "1"
 
 
 def cm(model, zin, level):
@@ -1549,7 +1600,7 @@ def finish(x, rec, x_first=None):
         rec["sign_ok"] = state.pop("sign_ok")
     if state.get("reslog"):
         rec["reslog"] = state.pop("reslog")
-    for k_ in ("diag2", "damp_a", "disc_rho", "diag3"):
+    for k_ in ("diag2", "damp_a", "disc_rho", "diag3", "prdJ"):
         if state.get(k_):
             rec[k_] = state.pop(k_)
     if CALW and state.get("calacc"):
@@ -1981,6 +2032,8 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         elif NEWOP == "ct":
             Pb.prox = ct_prox(y); w0 = ct_prox(y, 40)(torch.zeros(1, 3, 256, 256, device=dev), float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: regularised least squares, no model
         elif NEWOP == "ctnl":
+            if CTNL_MODE in ("poisson", "poislog"):              # the wrapper added Gaussian noise of 0.1 counts (negligible); draw the photon counts
+                gp_ = torch.Generator(device="cpu").manual_seed(1234 + int(state.get("img", 0))); y = torch.poisson(y.clamp(min=0.0).cpu(), generator=gp_).to(dev); Pb.y = y
             Pb.prox = ctnl_prox(y); w0 = Pb.prox.start(float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: logarithm + regularised least squares
         elif NEWOP == "quant":
             Pb.prox = quant_prox(y); w0 = y.clamp(-1.0, 1.0)
@@ -1991,7 +2044,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             if os.environ.get("MODUNWRAP", "0") == "1":       # reduction: wrap-around sensing -> unwrapping (linear Poisson solve) -> a denoising problem
                 w0 = (unwrap_ls(y) / 2).clamp(-1.0, 1.0)
         elif NEWOP == "blurclip":
-            Pb.prox = split_prox(hdr_prox(y)); w0 = (y / 2).clamp(-1.0, 1.0)
+            Pb.prox = split_prox(ev_fit(lambda s_: (2 * s_).clamp(-1.0, 1.0), y) if SPLIT_EV > 0 else hdr_prox(y)); w0 = (y / 2).clamp(-1.0, 1.0)
         elif NEWOP == "blurq":
             Pb.prox = split_prox(quant_prox(y)); w0 = y.clamp(-1.0, 1.0)
         elif NEWOP == "onebit":
@@ -2016,6 +2069,16 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         z0 = (y / 2).clamp(-1.0, 1.0)                           # warm start: undo the scaling (exact on unsaturated pixels)
         if os.environ.get("HDRMID", "0") == "1":                # clipped pixels are known to lie in [0.5, 1]: start them mid-range, not at the edge
             z0 = torch.where(y.abs() >= 1.0 - 2 * SIGY, 0.75 * torch.sign(y), z0)
+        if os.environ.get("HDR_REG", "0") == "1":
+            # statistical start: eigenfaces of MODEL SAMPLES fitted (ridge, closed form) to the unclipped pixels only, used to fill the clipped pixels,
+            # then moved into the range the measurement allows (clipped high -> at least 0.5, clipped low -> at most -0.5).  No model calls.
+            if "U" not in _HDRREG:
+                d_ = torch.load(os.path.abspath("../mode_probe/pca_cm.pt")); kk_ = int(os.environ.get("HDR_REGK", "256"))
+                _HDRREG["U"] = d_["U"][:kk_].flatten(1).to(dev); _HDRREG["mu"] = d_["mu"].flatten().to(dev); _HDRREG["var"] = d_["var"][:kk_].to(dev)
+            U_, mu_, var_ = _HDRREG["U"], _HDRREG["mu"], _HDRREG["var"]; unc = (y.abs() < 1.0 - 2 * SIGY).flatten().float(); t_ = ((y / 2).flatten() * 0.5 + 0.5 - mu_) * unc
+            c_ = torch.linalg.solve((U_ * unc) @ U_.T + float(os.environ.get("HDR_REGL", "1.0")) * (SIGY / 4) ** 2 * torch.diag(1.0 / var_), U_ @ t_)
+            pred = ((mu_ + c_ @ U_).view(1, 3, 256, 256) * 2 - 1); hi = y >= 1.0 - 2 * SIGY; lo_ = y <= -1.0 + 2 * SIGY
+            z0 = torch.where(hi, pred.clamp(0.5, 1.0), torch.where(lo_, pred.clamp(-1.0, -0.5), z0))
         if os.environ.get("HDRX", "0") == "1":
             Pb.prox = hdr_prox(y)
         x, rec, xf = unified(Pb, model, z0.clone(), z0.clone() if os.environ.get("HDRWARM", "1") == "1" else torch.zeros_like(z0), sched)
