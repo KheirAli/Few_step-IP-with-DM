@@ -1914,6 +1914,22 @@ def nl_kernel(A_funcs, dev):
                 YX = YX + Y[..., :, None] * X.conj()[..., None, :]; XX = XX + X[..., :, None] * X.conj()[..., None, :]
         eye = torch.eye(3, device=dev, dtype=XX.dtype)
         _NK["K"] = YX @ torch.linalg.inv(XX + 1e-3 * XX.diagonal(dim1=-2, dim2=-1).real.mean(-1)[..., None, None] * eye)
+        if os.environ.get("NLDIAG", "0") == "1" or os.environ.get("NLWIENER", "0") == "1":
+            # Can the network blur be written as "linear filter, then a per-pixel curve" (Wiener model  y ~ g(K x))?  Fit g per colour channel
+            # (monotone table, 65 knots) on the 8 fitting images, measure the unexplained share of the operator output on 8 OTHER images.
+            fs_ = sorted(_g.glob(os.path.abspath("../mode_probe/datacal/celeba_hq/celeba_hq/*.png"))); ld_ = lambda f: torch.from_numpy(_np.asarray(_I.open(f).convert("RGB")).astype(_np.float32) / 255).permute(2, 0, 1)[None].to(dev) * 2 - 1
+            Xa = torch.cat([ld_(f) for f in fs_[:8]]); Ya = torch.cat([A_funcs.A(x_[None]) for x_ in Xa]); Sa = torch.cat([nl_apply(_NK["K"], x_[None]) for x_ in Xa])
+            kn = torch.linspace(-1.3, 1.3, 65, device=dev); gt_ = torch.zeros(3, 65, device=dev)
+            for c_ in range(3):
+                bi_ = torch.bucketize(Sa[:, c_].flatten(), (kn[1:] + kn[:-1]) / 2); sm_ = torch.zeros(65, device=dev).index_add_(0, bi_, Ya[:, c_].flatten()); cn_ = torch.zeros(65, device=dev).index_add_(0, bi_, torch.ones_like(Ya[:, c_].flatten()))
+                gt_[c_] = torch.where(cn_ > 20, sm_ / cn_.clamp(min=1), kn); gt_[c_] = torch.cummax(gt_[c_], 0)[0]
+            def g_apply(s_):
+                t_ = ((s_.clamp(-1.3, 1.3) + 1.3) / 2.6 * 64); i0 = t_.floor().clamp(0, 63).long(); fr = t_ - i0
+                return torch.stack([gt_[c_][i0[:, c_]] * (1 - fr[:, c_]) + gt_[c_][i0[:, c_] + 1] * fr[:, c_] for c_ in range(3)], 1)
+            _NK["g"] = (kn, gt_, g_apply)
+            Xb = torch.cat([ld_(f) for f in fs_[8:16]]); Yb = torch.cat([A_funcs.A(x_[None]) for x_ in Xb]); Sb = torch.cat([nl_apply(_NK["K"], x_[None]) for x_ in Xb])
+            rr = lambda P_: float(((Yb - P_) ** 2).sum() / (Yb ** 2).sum()) ** 0.5
+            print(f"NLDIAG unexplained share of the operator output on 8 held-out images: identity {rr(Xb):.4f} | linear filter {rr(Sb):.4f} | linear filter + per-pixel curve {rr(g_apply(Sb)):.4f} | curve departure from identity (max |g(s)-s|) {float((gt_ - kn).abs().max()):.4f}", flush=True)
     return _NK["K"]
 
 
@@ -2061,6 +2077,19 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         Pl = Problem(Aop, ATy=ATy_)
         if LINEXACT:
             Pl.prox = svd_prox(Aop, ATy_)
+        if os.environ.get("PR2", "0") == "1":
+            # ATTEMPT 2 (2026-11-24): masked phase retrieval kept in the paper's operator class instead of being reduced to inpainting.
+            # A(x) = |F P D x| : D = known +-1/0 mask (diagonal), P = zero padding, F = unitary FFT  ->  "linear, then coordinate-wise magnitude".
+            # Data step = two exact pieces, applied once: per Fourier coefficient keep the phase and set the magnitude to (a + r|c|)/(1 + r);
+            # then back to the image, which is DIAGONAL in pixels because (FPD)'(FPD) = D^2: kept pixels take mod * crop(F^-1 u), the rest keep v.
+            import functions.measurements as _FM2
+            pd_ = A_funcs.pad; md_ = A_funcs.modulation.to(y.dtype)[None, None]; wk_ = (md_ != 0); rs_ = float(os.environ.get("PR2_RS", "1"))
+
+            def _prox_pr2(v, rho):
+                G = _FM2.fft2_m(torch.nn.functional.pad(md_ * v, (pd_, pd_, pd_, pd_))); r = rs_ * float(rho)
+                u = G / (G.abs() + 1e-8) * (y + r * G.abs()) / (1 + r)
+                return torch.where(wk_.expand_as(v), _FM2.ifft2_m(u).real[..., pd_:-pd_, pd_:-pd_] * md_, v)
+            Pl.prox = _prox_pr2
         x, rec, xf = unified(Pl, model, xi.clone(), xi.clone(), sched)
         KC = int(os.environ.get("PRCAND", "1"))
         if KC > 1:
