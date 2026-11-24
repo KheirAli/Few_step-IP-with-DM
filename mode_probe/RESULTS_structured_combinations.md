@@ -239,3 +239,18 @@ One pass of the phase predictor -> hypothesis with the best low-frequency magnit
 4 calls 22.87/0.385, 8 calls 23.72/0.345; 0.0% below 14 dB (5th percentile 18.1 / 18.7 dB).
 Iterative versions for comparison: training-free 23.62/0.369, 24.38/0.336 (0.9% failures); with the predictor inside the fit 24.07/0.356, 24.78/0.325 (0.0%). DAPS 26.70/0.308.
 On generated images the non-iterative version matched the training-free iterative one (24.55 vs 24.37 at 4 calls); on real test images it is 0.7 dB lower.
+
+# ATTRIBUTION ABLATION and generic data-fit in the full pipeline (2026-11-24, `attribution.py`)
+
+Same pipeline in every arm (schedule, noise tilt, 4 calls, 8-band + data-fit combination refitted on 128 generated images for that arm); ONLY the data step differs. Gradient solver = PnP-CM's, learning rate (4 values) and iterations (100/400) chosen on generated images. 107 test images; PSNR/LPIPS, time per image (shared GPUs).
+
+| Task | Ours (closed form) | Gradient solver, tuned | Generic table, minimiser | Generic table, mean |
+|---|---|---|---|---|
+| hdr | 26.32/0.269, 0.30s | 26.17/0.263, 0.47s (lr 0.005, 100 it) | 26.33/0.269, 0.21s | 25.57/0.289, 0.30s |
+| quant | 30.84/0.216, 0.33s | 31.08/0.196, 1.08s (lr 0.02, 400 it) | 30.89/0.214, 1.05s | 30.79/0.203, 0.27s |
+| onebit | 29.49/0.241, 0.22s | 28.90/0.255, 3.58s (lr 0.05, 400 it) | 25.89/0.340, 1.79s | 27.90/0.295, 0.72s |
+| gamma | 32.04/0.173, 0.32s | 32.00/0.173, 1.27s (lr 0.005, 400 it) | 32.04/0.173, 0.30s | 31.18/0.175, 0.35s |
+| blurclip | 24.33/0.400, 0.28s | 23.90/0.406, 4.18s (lr 0.005, 400 it) | - | - |
+| ctnl30 | 27.47/0.292, 0.56s | 25.64/0.378, 3.85s (lr 0.02, 400 it) | - | - |
+
+Nonlinear CT row: the gradient arm inherits our penalty (0.03), which suits our data step; tuned separately with its own penalty it reached 23.93 without the combination. Gradient-solver sensitivity on generated images (worst / best setting): HDR 17.1 / 25.6, one-bit 14.0 / 22.3, tone curve 25.3 / 29.3, blur then clip 21.2 / 25.7, quantisation 26.7 / 27.8 dB.
