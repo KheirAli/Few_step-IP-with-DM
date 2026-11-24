@@ -1944,6 +1944,7 @@ def jpeg_linear_prox(A_funcs, y):
 # the anchor with the codec's own colour/DCT transform, clip every coefficient into its interval, transform the change back.
 # Closed form, no gradients, no differentiable codec.
 JSOFT = os.environ.get("JSOFT", "0") == "1"; JCOLD = os.environ.get("JCOLD", "0") == "1"
+JEV = os.environ.get("JEV", ""); JEVFILE = os.environ.get("JEVFILE", ""); JEVS = float(os.environ.get("JEVS", "1")); _JE = {}
 JPROJ = os.environ.get("JPROJ", "0") == "1"; JMARGIN = float(os.environ.get("JMARGIN", "0.5"))
 
 
@@ -1973,7 +1974,20 @@ def jpeg_interval_proj(y, qf):
     q1, q2 = JT.quantization_matrix(qf); q1 = q1.to(y.device).view(1, 1, 8, 8); q2 = q2.to(y.device).view(1, 1, 8, 8)
 
     def proj(v, rho=None):
-        cl, cc = _jp_coef(v)
+        cl, cc = _jp_coef(v); lo1, hi1, lo2, hi2 = (kl - JMARGIN) * q1, (kl + JMARGIN) * q1, (kc - JMARGIN) * q2, (kc + JMARGIN) * q2
+        if JEV and rho is not None:
+            # exact per-coefficient posterior mean: belief N(c, s_k^2) with s_k tabulated per DCT position and step on generated images, truncated to
+            # the coefficient's quantisation interval (the intervals are known exactly, so the data term is a hard constraint, not a penalty)
+            n_ = str(state.get("step", (0, 1))[0])
+            if JEV == "cal":
+                gl, gc = _jp_coef(state["gt"].to(v.device)); e_ = _JE.setdefault(n_, {"l": torch.zeros(1, 8, 8, device=v.device), "c": torch.zeros(2, 8, 8, device=v.device), "n": 0})
+                e_["l"] += ((cl - gl) ** 2).mean(0); e_["c"] += ((cc - gc) ** 2).mean(0); e_["n"] += 1
+                json.dump({k_: {"l": (d_["l"] / d_["n"]).tolist(), "c": (d_["c"] / d_["n"]).tolist()} for k_, d_ in _JE.items()}, open(JEVFILE, "w"))
+            else:
+                if not _JE: _JE.update(json.load(open(JEVFILE)))
+                t_ = _JE.get(n_, _JE[max(_JE, key=int)]); sl = torch.tensor(t_["l"], device=v.device).sqrt() * JEVS; sc_ = torch.tensor(t_["c"], device=v.device).sqrt() * JEVS
+                nl, _ = trunc_mean(cl, sl.expand_as(cl), lo1, hi1); nc, _ = trunc_mean(cc, sc_.expand_as(cc), lo2, hi2)
+                return v + _jp_back(nl.to(cl.dtype) - cl, nc.to(cc.dtype) - cc)
         if EVFIT and rho is not None:
             # posterior mean per codec coefficient: belief N(c, s_c^2), the coefficient is known to lie in its quantisation interval
             sd = s_cal() * 127.5; nl, _ = trunc_mean(cl, sd * 0.669, (kl - JMARGIN) * q1, (kl + JMARGIN) * q1); nc, _ = trunc_mean(cc, sd * 0.311, (kc - JMARGIN) * q2, (kc + JMARGIN) * q2)

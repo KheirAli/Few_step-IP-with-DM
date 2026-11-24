@@ -439,3 +439,30 @@ group), so this noise is practically white there (results equal the white arm). 
 Not supported as a replacement for the tilt: below the tilt in PSNR on all 9 tasks (same power). Exception to follow up: tone curve with total = told
 level, 34.24/0.118 (+1.0 dB) - a level effect (less injected noise), not a colouring effect (same-power arm 32.84).
 JPEG, nonlinear deblur, blur+clip, blur+quantise not run (composite coordinates).
+
+# JPEG: exact data step (2026-11-24, `jpeg_exact.py`, `JEV`)
+
+Check (16 generated images): re-encoding the noisy measurement recovers every coefficient's quantisation interval exactly - projecting the TRUE image
+onto the recovered intervals changes it by 0.00000. So the data term is a hard constraint. New step (`JEV=use`): per-coefficient posterior mean = mean of
+N(c, s_k^2) truncated to the interval, s_k tabulated per DCT position and step on generated images (x `JEVS`); one closed-form update per step, no
+frequency weighting; final image projected into the intervals (`JFINAL=1`). Same schedule as the clean protocol. Variants on generated images (128:176):
+
+JX belief std of luma coefficients (0..255 scale), step 2: DC 179.5, first AC 70.2, highest AC 4.5 | luma quantisation steps: DC 160, highest 255
+JX generated images: soft_fw (current): 27.57/0.341 (n=48)
+JX generated images: soft_fw + final projection: 27.58/0.341 (n=48)
+JX generated images: hard_fw + final projection: 27.56/0.330 (n=48)
+JX generated images: hard + final projection: 27.37/0.332 (n=48)
+JX generated images: posterior mean: 27.48/0.332 (n=48)
+JX generated images: posterior mean + final projection: 27.49/0.332 (n=48)
+JX generated images: posterior mean x0.5 + final projection: 27.69/0.325 (n=48)
+JX chosen on generated images: posterior mean x0.5 + final projection
+JX TEST posterior mean x0.5 + final projection: 27.40/0.324 (n=107) | current 27.19/0.336 | DAPS 28.15/0.259 | PnP-CM 26.05/0.358
+JY width factor on generated images: x0.15: 27.55/0.329 | x0.25: 27.66/0.325 | x0.35: 27.70/0.323 | x0.5: 27.69/0.325 | x0.7: 27.60/0.329
+JY chosen width x0.35; schedule tuning on generated images: 27.38 -> 27.52, sigma 1.260 1.028 1.158 0.028 told x1.2
+JY generated images, tuned schedule: 27.76/0.330 (old schedule 27.70/0.323)
+JY TEST posterior mean x0.35, tuned schedule: 27.45/0.338 (n=107) | first exact version 27.40/0.324 | previous 27.19/0.336 | DAPS 28.15/0.259
+JZ TEST posterior mean x0.35, unchanged schedule: 27.38/0.324 (n=107)
+
+Test (107 images): previous soft+fw 27.19/0.336 | posterior mean x0.5 27.40/0.324 | x0.35 27.38/0.324 | x0.35 + retuned schedule 27.45/0.338.
+Reading: the exact step gives about +0.2 dB and -0.012 LPIPS with ONE closed-form update per step (was 7); width factor is flat between 0.25 and 0.5;
+schedule retuning (PSNR criterion) buys +0.05 dB and loses the LPIPS gain - not adopted. DAPS 28.15/0.259 still ahead.
