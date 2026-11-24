@@ -200,3 +200,8 @@ Ours = CelebA-HQ settings unchanged, combination weights refitted on generated b
 | Blur then quantise | 22.47/0.474 | 22.66/0.475 | 21.45/0.403 | 21.75/0.562 | 23.53/0.428 |
 | Blur then clip | 21.37/0.467 | 21.56/0.486 | 12.28/0.614 | 24.50/0.373 | 22.70/0.445 |
 | Unmasked phase retrieval | - | - | 9.98/0.740 | 20.06/0.457 | not run |
+
+# Black-box pointwise data-fit (2026-11-24, `GENERIC=1`, `blackbox_pointwise_prox`)
+
+No formula for the operator: it is evaluated once on 257 constant images, giving a per-pixel table; the data-fit is the exact grid minimiser. 107 test images, 4 calls, no combination step, PSNR/LPIPS, hand-derived formula vs black-box:
+HDR 23.18/0.357 vs 23.21/0.356; quantisation 28.37/0.268 vs 28.41/0.266; one-bit (nearest-value version) 23.88/0.358 vs 23.84/0.358; tone curve 28.28/0.235 vs 28.28/0.235; wrap-around 9.47/0.707 vs 9.47/0.707 (fails either way).

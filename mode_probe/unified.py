@@ -507,6 +507,21 @@ def mod_prox(y):
     return prox
 
 
+def blackbox_pointwise_prox(A, y, K=257):
+    """GENERIC data-fit for ANY operator that acts on each pixel separately - no formula for the operator is needed.
+    The operator is evaluated once on K constant images (grey levels c_1..c_K); that gives, for every pixel, the table f_pixel(c_k).
+    The data-fit is then the exact minimiser over the grid of (1/2)(f(c) - y)^2 + (rho/2)(c - v)^2, pixel by pixel (non-convex or
+    discontinuous f included).  GENERIC=mean returns the mean of exp(-objective / sigma_y^2) over the grid instead of the minimiser."""
+    c = torch.linspace(-1.0, 1.0, K, device=y.device); tab = torch.stack([A(torch.full_like(y, float(v_))) for v_ in c]); cg = c.view(K, 1, 1, 1, 1)
+
+    def prox(v, rho):
+        ob = 0.5 * (tab - y[None]) ** 2 + 0.5 * float(rho) * (cg - v[None]) ** 2
+        if os.environ.get("GENERIC", "") == "mean":
+            w = torch.exp(-(ob - ob.min(0, keepdim=True)[0]) / SIGY ** 2); return (w * cg).sum(0) / w.sum(0)
+        return torch.gather(cg.expand(K, *v.shape), 0, ob.argmin(0, keepdim=True))[0]
+    return prox
+
+
 def ev_fit(f, y, lo=None):
     """STATISTICAL scalar update for 'linear, then a per-coordinate function f':  instead of the minimiser of
     (1/2)(f(s) - y)^2 + (mu/2)(s - p)^2  it returns the MEAN of the density exp(-objective / T), T = SPLIT_EV * sigma_y^2  (the posterior mean of s
@@ -2123,8 +2138,9 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             Pb.prox = ctnl_prox(y); w0 = Pb.prox.start(float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: logarithm + regularised least squares
         elif NEWOP == "quant":
             Pb.prox = quant_prox(y); w0 = y.clamp(-1.0, 1.0)
+            if os.environ.get("GENERIC", ""): Pb.prox = blackbox_pointwise_prox(A_funcs.A, y)
         elif NEWOP == "gamma":
-            Pb.prox = gamma_prox(y); w0 = (2 * ((y.clamp(-1.0, 1.0) + 1) / 2) ** (1 / _GAM) - 1).clamp(-1.0, 1.0)     # start: the curve undone
+            Pb.prox = blackbox_pointwise_prox(A_funcs.A, y) if os.environ.get("GENERIC", "") else gamma_prox(y); w0 = (2 * ((y.clamp(-1.0, 1.0) + 1) / 2) ** (1 / _GAM) - 1).clamp(-1.0, 1.0)     # start: the curve undone
         elif NEWOP == "mod":
             Pb.prox = mod_prox(y); w0 = (y / 2).clamp(-1.0, 1.0)
             if os.environ.get("MODUNWRAP", "0") == "1":       # reduction: wrap-around sensing -> unwrapping (linear Poisson solve) -> a denoising problem
@@ -2143,6 +2159,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             Pb.prox = split_prox(quant_prox(y)); w0 = y.clamp(-1.0, 1.0)
         elif NEWOP == "onebit":
             Pb.prox = onebit_prox(torch.sign(y), A_funcs.tau); w0 = torch.zeros_like(y)
+            if os.environ.get("GENERIC", ""): Pb.prox = blackbox_pointwise_prox(A_funcs.A, torch.sign(y))
             if os.environ.get("OBWARM", "0") == "1":             # warm start: the per-pixel solution of the first data-fit from a blank image
                 w0 = Pb.prox(w0, float(sched[2][0])).clamp(-1.0, 1.0)
         elif NEWOP == "haze":
@@ -2175,6 +2192,8 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             z0 = torch.where(hi, pred.clamp(0.5, 1.0), torch.where(lo_, pred.clamp(-1.0, -0.5), z0))
         if os.environ.get("HDRX", "0") == "1":
             Pb.prox = hdr_prox(y)
+        if os.environ.get("GENERIC", ""):
+            Pb.prox = blackbox_pointwise_prox(A_funcs.A, y)
         x, rec, xf = unified(Pb, model, z0.clone(), z0.clone() if os.environ.get("HDRWARM", "1") == "1" else torch.zeros_like(z0), sched)
         torch.cuda.synchronize(); rec["time_total"] = time.time() - t_entry
         if state["gt"] is not None:
