@@ -26,6 +26,8 @@
 !/mode_probe/data_paper/
 !/mode_probe/data100/
 !/mode_probe/datacal/
+!/mode_probe/data_bed/
+!/mode_probe/data_bedgen/
 !/mode_probe/data_gen/
 !/mode_probe/data_gen512/
 !/baselines_src/
