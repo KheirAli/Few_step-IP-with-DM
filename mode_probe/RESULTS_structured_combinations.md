@@ -176,3 +176,27 @@ Consistency model cd_bedroom256_lpips. Ours: every task's CelebA-HQ configuratio
 All choices made on 24 model-generated images (classical loop 80 passes with offset; first noise level 1.0 for 4 calls, 1.5 for 8 calls; predictor radius 48), then 107 test images x 3 measurement-noise draws, PSNR/LPIPS:
 training-free 23.62/0.369 (4 calls), 24.38/0.336 (8 calls), 0.9% below 14 dB; learned phase predictor 24.07/0.356 (4), 24.78/0.325 (8), 0.0% below 14 dB.
 (Previous numbers, with settings chosen on test images: 23.14/0.387, 24.07/0.344; 23.75, 24.48.)
+
+# LSUN bedroom, complete table (2026-11-24); 58 test images, PSNR/LPIPS
+
+Ours = CelebA-HQ settings unchanged, combination weights refitted on generated bedroom images, 4 calls; nonlinear CT = no alternation. PnP-CM (+ scalar extrapolation fitted on generated bedroom images), 4 calls. DPS / DAPS with google/ddpm-ema-bedroom-256, ~1000 calls. Masked phase retrieval: sign fixed by the truth for all.
+
+| Task | PnP-CM | PnP-CM + extrapolation | DPS | DAPS | Ours |
+|---|---|---|---|---|---|
+| SR x4 | 23.89/0.375 | 24.35/0.368 | 21.22/0.429 | 22.07/0.542 | 24.72/0.367 |
+| Gaussian deblur | 25.83/0.308 | 25.85/0.305 | 21.98/0.372 | 22.84/0.505 | 26.44/0.291 |
+| Inpainting | 25.77/0.264 | 25.86/0.264 | 24.54/0.330 | 25.67/0.318 | 26.58/0.255 |
+| JPEG | 23.80/0.403 | 24.61/0.384 | 20.73/0.451 | 26.23/0.313 | 25.12/0.358 |
+| Nonlinear deblur | 23.53/0.356 | 23.65/0.366 | 21.45/0.411 | 25.18/0.328 | 24.31/0.373 |
+| HDR | 22.93/0.301 | 25.26/0.236 | 15.05/0.521 | 25.49/0.260 | 25.78/0.245 |
+| Quantisation | 25.71/0.283 | 29.67/0.209 | 25.01/0.338 | 25.13/0.372 | 29.98/0.207 |
+| One-bit | 16.05/0.653 | 19.99/0.572 | 26.34/0.261 | 19.92/0.560 | 28.50/0.234 |
+| Masked phase retrieval | 21.97/0.453 | 21.63/0.463 | 22.19/0.418 | 24.52/0.383 | 24.74/0.386 |
+| Linear CT 60 views | - | - | 23.54/0.352 | 28.32/0.257 | 28.42/0.226 |
+| Linear CT 30 views | - | - | 22.42/0.375 | - | 25.52/0.346 |
+| Nonlinear CT 60 views | 22.21/0.438 | 22.44/0.438 | 19.53/0.464 | 25.05/0.354 | 25.46/0.319 |
+| Nonlinear CT 30 views | 20.91/0.488 | 21.12/0.488 | 19.32/0.470 | 23.85/0.403 | 24.10/0.380 |
+| Tone curve | 25.35/0.234 | 27.47/0.210 | 23.81/0.351 | 28.50/0.282 | 30.67/0.191 |
+| Blur then quantise | 22.47/0.474 | 22.66/0.475 | 21.45/0.403 | 21.75/0.562 | 23.53/0.428 |
+| Blur then clip | 21.37/0.467 | 21.56/0.486 | 12.28/0.614 | 24.50/0.373 | 22.70/0.445 |
+| Unmasked phase retrieval | - | - | 9.98/0.740 | 20.06/0.457 | not run |
