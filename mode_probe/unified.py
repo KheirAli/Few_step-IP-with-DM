@@ -266,10 +266,20 @@ def prd_setup(y):
                     loss.backward(); return loss
                 opt.step(closure); k *= 2
         return (mu_ + (c.detach() @ U_[:c.numel()].flatten(1)).view(1, 3, 256, 256)).clamp(0, 1) * 2 - 1
+    _NT = {}
+
     def soft_fit(img, rho):
         # noise-aware data-fit: the EXACT minimiser, per Fourier coefficient, of (1/2)(|c| - y)^2 + (rho'/2)|c - u|^2.
         # The magnitude moves only part of the way to the (noisy) measurement; the phase is kept.  One FFT pair.
         g = torch.nn.functional.pad((img * 0.5 + 0.5), (64, 64, 64, 64)); G = _FU.fft2_m(g); r4 = 4.0 * float(rho)
+        if _NT.get("c") is not None and float(os.environ.get("PRD_KAPPA", "0")) > 0:
+            # NON-ITERATIVE mapping to a partly LINEAR problem: inside a low-frequency disc the predictor's phases turn the measured magnitudes into
+            # complex coefficients c (a linear measurement).  Per coefficient, exact minimiser of
+            #   (1/2)(|u| - a)^2 + (r/2)|u - z|^2 + (kappa/2)|u - c|^2   =  the magnitude formula with anchor (r z + kappa c)/(r + kappa) and weight r + kappa.
+            # kappa decays over the steps, so predicted phases are never locked in.
+            kap = float(os.environ["PRD_KAPPA"]) * r4 * float(os.environ.get("PRD_KDECAY", "0.5")) ** state.get("step", (0, 1))[0] * _NT["M"]
+            Gz = (r4 * G + kap * _NT["c"]) / (r4 + kap); re_ = r4 + kap; G = Gz / (Gz.abs() + 1e-8) * (amp + re_ * Gz.abs()) / (1 + re_)
+            return (_FU.ifft2_m(G).real * S)[..., 64:320, 64:320].clamp(0, 1) * 2 - 1
         n_ad = int(os.environ.get("PRD_ADMM", "0"))
         if n_ad:
             # The step below ("fit every coefficient, transform back, crop") is ONE splitting step, not the exact data-fit: the padded transform is
@@ -378,6 +388,21 @@ def prd_setup(y):
                 best = (lj, cj)
         return (mu_ + (best[1] @ U_).view(1, 3, 256, 256)).clamp(0, 1) * 2 - 1
     refine.netfit_init = netfit_init
+
+    def netdirect_init():
+        """NON-ITERATIVE start.  One pass of the phase predictor (about 1 ms) gives K low-resolution face hypotheses.  The one whose low-frequency
+        magnitudes agree best with the measurement is kept; its phases, attached to the MEASURED magnitudes, give the coarse image in one inverse
+        transform.  Its phases inside the disc PRD_NETR are stored as linear targets for the data step.  No fit, no search over starts, no loop."""
+        from phnet_arch import Net2, feat2
+        tag = os.environ.get("PRD_NET", "v2k8"); Cn = torch.load(os.path.abspath(f"../mode_probe/phase_net_{tag}.pt"), map_location=y.device); Kh = int(tag.split("k")[1])
+        net = Net2(Kh).to(y.device); net.load_state_dict(Cn["sd"]); net.eval()
+        with torch.no_grad(): H = net((feat2(amp, _FU) - Cn["fm"]) / Cn["fs"])[0]
+        H = torch.nn.functional.interpolate(H, size=256, mode="bicubic", align_corners=False).clamp(0, 1)
+        ii = torch.arange(384, device=y.device).float() - 192; rad = (ii[:, None] ** 2 + ii[None, :] ** 2).sqrt(); M = (rad < float(os.environ.get("PRD_NETR", "32"))).expand(1, 3, 384, 384)
+        GH = _FU.fft2_m(torch.nn.functional.pad(H, (64, 64, 64, 64))); k = int((((GH.abs() - amp) ** 2) * M).flatten(1).mean(1).argmin())
+        ph = torch.exp(1j * GH[k:k + 1].angle()); _NT["c"] = amp * ph; _NT["M"] = M.float(); refine.net_face = H[k:k + 1] * 2 - 1
+        return (_FU.ifft2_m(amp * ph).real * S)[..., 64:320, 64:320].clamp(0, 1) * 2 - 1
+    refine.netdirect_init = netdirect_init
 
     def regfit_init(nstart=1):
         # calibrated inverse map + fit: (1) ridge regression, trained only on samples of the consistency model, predicts the 512
@@ -2081,6 +2106,8 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             w0 = w0 * 2 - 1
         if os.environ.get("PRD_INIT", "hio") in ("regfit", "regfit4"):
             w0 = refine.regfit_init(int(os.environ.get("PRD_NSTART", "4")) if os.environ["PRD_INIT"] == "regfit4" else 1).clamp(-1.0, 1.0)
+        if os.environ.get("PRD_INIT", "hio") == "netdirect":
+            w0 = refine.netdirect_init().clamp(-1.0, 1.0)
         if os.environ.get("PRD_INIT", "hio") == "netfit":
             w0 = refine.netfit_init(int(os.environ.get("PRD_NETREG", "0"))).clamp(-1.0, 1.0)
         if os.environ.get("PRD_INIT", "hio") == "pca":

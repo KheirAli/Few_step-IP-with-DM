@@ -211,3 +211,24 @@ HDR 23.18/0.357 vs 23.21/0.356; quantisation 28.37/0.268 vs 28.41/0.266; one-bit
 Share of coordinates for which the plausible values (objective within 4 sigma_y^2 of the best) form 2+ separate pieces, when the current estimate is off by 0.5 / 0.15 of the half-range:
 HDR 0.3% / 0.1%; quantisation 2.8% / 2.1%; one-bit 0.0% / 0.0%; tone curve 0.0% / 0.0%; exponential attenuation (CT ray) 0.0% / 0.0%; wrap-around 86.9% / 0.6%; magnitude with the sign lost 49.5% / 3.8%.
 The two operators flagged (wrap-around, magnitude) are the two on which the method fails without a starting-point search.
+
+# CLEAN PROTOCOL, CelebA-HQ (2026-11-24, `clean_protocol.py`)
+
+Every per-task choice (data-fit variant, noise schedule, told-level factor) made on 48 model-generated images with one rule (one pass of coordinate search, combination in the score, best score adopted); in-loop weights (8 bands + data-fit term) fitted on 128 generated images; 107 test images once. PSNR/LPIPS.
+
+| Task | Chosen on generated images | Clean protocol, test | Previous number |
+|---|---|---|---|
+| sr_bicubic | plain; sigma 0.26 0.44 0.17 0.09; told x1.0 | 28.28/0.297 | 28.28/0.297 |
+| deblur_gauss | fw; sigma 0.33 0.24 0.09 0.17; told x1.0 | 29.98/0.253 | 29.76/0.263 |
+| inpainting | fw; sigma 0.33 0.24 0.01 0.01; told x1.0 | 30.29/0.207 | 30.29/0.207 |
+| jpeg | softfw; sigma 2.29 1.03 0.35 0.01; told x1.2 | 27.19/0.336 | 27.02/0.338 |
+| deblur_nl | fw; sigma 2.29 0.35 0.31 0.25; told x1.2 | 26.35/0.333 | 26.43/0.332 |
+| hdr | plain; sigma 1.25 2.10 0.31 0.14; told x1.5 | 26.42/0.268 | 26.42/0.268 |
+| quant | fw; sigma 0.21 0.19 0.31 0.25; told x1.5 | 31.31/0.182 | 31.46/0.177 |
+| onebit | evfw; sigma 0.69 0.64 0.56 0.46; told x1.0 | 30.30/0.213 | 30.30/0.213 |
+| prmask | fw; sigma 0.33 0.24 0.03 0.03; told x1.2 | 28.20/0.273 | 27.93/0.271 |
+| blurclip | split; sigma 1.25 2.10 0.17 0.14; told x1.0 | 24.67/0.387 | 23.62/0.433 (no combination) |
+| blurq | split; sigma 0.21 2.10 0.31 0.25; told x1.0 | 26.62/0.351 | 25.52/0.413 (no combination) |
+| gamma | plain; sigma 0.21 0.19 0.31 0.25; told x1.5 | 33.22/0.147 | 29.21/0.217 (no combination) |
+| ct30 | r1; sigma 0.90 0.45 0.33 0.17; told x1.5 | 30.03/0.223 | 29.20/0.255 (no combination) |
+| ct60 | r1; sigma 0.28 0.25 0.33 0.17; told x1.5 | 32.25/0.171 | 31.50/0.200 (no combination) |

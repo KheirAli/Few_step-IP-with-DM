@@ -23,26 +23,26 @@ measurements do not single out one answer (wrap-around, magnitudes) and therefor
 
 ## Results at 4 model calls (PSNR / LPIPS)
 
-CelebA-HQ, 107 test images. DPS / DAPS: about 1000 calls, CelebA-HQ diffusion prior.
+CelebA-HQ, 107 test images. DPS / DAPS: about 1000 calls, CelebA-HQ diffusion prior. The "Ours" column is the CLEAN-PROTOCOL result: every choice made on model-generated images, test set used once (unmasked phase retrieval, coded diffraction and nonlinear CT were tuned the same way in their own runs).
 
 | Task | PnP-CM | PnP-CM + scalar extrapolation | DPS | DAPS | Ours |
 |---|---|---|---|---|---|
 | SR x4 | 27.24/0.287 | 27.45/0.284 | 24.34/0.287 | 25.47/0.414 | 28.28/0.297 |
-| Gaussian deblur | 28.92/0.249 | 29.02/0.246 | 25.12/0.260 | 26.60/0.340 | 29.76/0.263 |
+| Gaussian deblur | 28.92/0.249 | 29.02/0.246 | 25.12/0.260 | 26.60/0.340 | 29.98/0.253 |
 | Inpainting 70% | 29.06/0.204 | 29.31/0.204 | 27.19/0.249 | 27.56/0.299 | 30.29/0.207 |
-| JPEG QF5 | 26.05/0.358 | 26.46/0.355 | 24.05/0.302 | 28.15/0.259 | 27.02/0.338 |
-| Nonlinear deblur | 24.88/0.302 | 25.13/0.307 | 23.19/0.305 | 26.26/0.312 | 26.43/0.332 |
+| JPEG QF5 | 26.05/0.358 | 26.46/0.355 | 24.05/0.302 | 28.15/0.259 | 27.19/0.336 |
+| Nonlinear deblur | 24.88/0.302 | 25.13/0.307 | 23.19/0.305 | 26.26/0.312 | 26.35/0.333 |
 | HDR | 23.17/0.359 | 25.07/0.279 | 25.62/0.272 | 25.88/0.271 | 26.42/0.268 |
-| 3-bit quantisation | 25.51/0.284 | 30.19/0.200 | 27.75/0.260 | 25.25/0.378 | 31.46/0.177 |
+| 3-bit quantisation | 25.51/0.284 | 30.19/0.200 | 27.75/0.260 | 25.25/0.378 | 31.31/0.182 |
 | One-bit | 19.03/0.516 | 23.16/0.447 | 28.82/0.217 | 22.38/0.512 | 30.30/0.213 |
-| Masked phase retrieval | 22.93/0.463 | 24.02/0.416 | 24.79/0.308 | 27.03/0.318 | 27.93/0.271 |
+| Masked phase retrieval | 22.93/0.463 | 24.02/0.416 | 24.79/0.308 | 27.03/0.318 | 28.20/0.273 |
 | Unmasked phase retrieval | ~13 | - | 13.43/0.643 | 26.70/0.308 | 23.62/0.369 (24.38/0.336 at 8 calls) |
 | Coded diffraction, 2 masks | 28.65/0.186 | - | - | - | 34.45/0.126 |
-| Linear CT 60 / 30 views | 28.40 / 26.89 | - | 28.75/0.218, 27.70/0.231 | 30.59/0.227, failed | 31.50/0.200, 29.20/0.255 |
+| Linear CT 60 / 30 views | 28.40 / 26.89 | - | 28.75/0.218, 27.70/0.231 | 30.59/0.227, failed | 32.25/0.171, 30.03/0.223 |
 | Nonlinear CT 60 / 30 views | 25.24/0.326, 23.93/0.355 | - | 24.80/0.270, 24.15/0.278 | 28.55/0.254, 27.65/0.264 | 28.73/0.254, 27.47/0.292 |
-| Tone curve | 27.25/0.217 | - | 27.50/0.239 | 29.62/0.245 | 29.21/0.217 |
-| Blur then quantise | 24.51/0.365 | - | 24.63/0.276 | 24.76/0.388 | 25.52/0.413 |
-| Blur then clip | 22.91/0.419 | - | 22.57/0.333 | 27.00/0.276 | 23.62/0.433 |
+| Tone curve | 27.25/0.217 | - | 27.50/0.239 | 29.62/0.245 | 33.22/0.147 |
+| Blur then quantise | 24.51/0.365 | - | 24.63/0.276 | 24.76/0.388 | 26.62/0.351 |
+| Blur then clip | 22.91/0.419 | - | 22.57/0.333 | 27.00/0.276 | 24.67/0.387 |
 
 LSUN bedroom, 58 test images, CelebA-HQ settings unchanged (only the combination weights refitted on generated bedroom images): see the
 complete table in `mode_probe/RESULTS_structured_combinations.md`. Ours has the best PSNR on 13 of 16 tasks; DAPS leads on JPEG,
