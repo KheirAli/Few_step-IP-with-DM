@@ -232,3 +232,10 @@ Every per-task choice (data-fit variant, noise schedule, told-level factor) made
 | gamma | plain; sigma 0.21 0.19 0.31 0.25; told x1.5 | 33.22/0.147 | 29.21/0.217 (no combination) |
 | ct30 | r1; sigma 0.90 0.45 0.33 0.17; told x1.5 | 30.03/0.223 | 29.20/0.255 (no combination) |
 | ct60 | r1; sigma 0.28 0.25 0.33 0.17; told x1.5 | 32.25/0.171 | 31.50/0.200 (no combination) |
+
+# NON-ITERATIVE unmasked phase retrieval (2026-11-24, `pr_direct.py`, `PRD_INIT=netdirect PRD_TV=0`)
+
+One pass of the phase predictor -> hypothesis with the best low-frequency magnitude match -> coarse image = inverse transform of (measured magnitude x predicted phase) -> 4 or 8 model calls with the per-coefficient magnitude fit. No fit, no multi-start, no classical loop. First noise level chosen on 24 generated images (0.7 / 1.0). 107 test images x 3 noise draws, PSNR/LPIPS:
+4 calls 22.87/0.385, 8 calls 23.72/0.345; 0.0% below 14 dB (5th percentile 18.1 / 18.7 dB).
+Iterative versions for comparison: training-free 23.62/0.369, 24.38/0.336 (0.9% failures); with the predictor inside the fit 24.07/0.356, 24.78/0.325 (0.0%). DAPS 26.70/0.308.
+On generated images the non-iterative version matched the training-free iterative one (24.55 vs 24.37 at 4 calls); on real test images it is 0.7 dB lower.
