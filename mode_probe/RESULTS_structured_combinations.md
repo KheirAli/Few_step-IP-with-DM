@@ -415,3 +415,27 @@ Schedules were tuned with the tilt on (favours the tilt over white and matched).
 | hdr | 25.51/0.277 | 26.42/0.268 | 26.06/0.274 | 26.55/0.268 |
 
 Fitted profiles are nearly identical across tasks: the tilt's profile with band 4 (or 5) lowered by x0.4. Literature and next test (operator-domain coloured renoising, FIRE arXiv 2501.17468; residual-based variance): see session notes.
+
+# Coloured renoising in the operator's coordinates, after FIRE (2026-11-24, `fire_arms.py`, `NOISE=fire`)
+
+Error of the model input tabulated per coordinate group on generated images (singular-value bins for linear operators, measurement-value bins for
+pointwise operators); injected noise variance per group chosen so that error + noise is white. Same data step, schedule and band combination
+(refitted per arm); 107 test images once. "Same power": injected power as in the schedule, told level unchanged. "Total = told": FIRE's rule.
+
+| Task | White | Tilt 0.5 (current) | Operator-domain renoising, same injected power | Operator-domain renoising, total = told level |
+|---|---|---|---|---|
+| sr_bicubic | 27.69/0.306 | 28.28/0.297 | 28.23/0.290 | 28.16/0.283 |
+| deblur_gauss | 29.47/0.242 | 29.98/0.253 | 29.72/0.239 | 29.59/0.241 |
+| inpainting | 30.03/0.205 | 30.29/0.207 | 30.03/0.205 | 29.51/0.224 |
+| ct30 | 28.34/0.290 | 30.03/0.223 | 28.56/0.276 | 28.45/0.283 |
+| ct60 | 31.31/0.199 | 32.25/0.171 | 31.62/0.181 | 31.76/0.177 |
+| hdr | 25.51/0.277 | 26.42/0.268 | 25.54/0.271 | 25.56/0.274 |
+| quant | 30.76/0.188 | 31.31/0.182 | 30.76/0.188 | 31.04/0.183 |
+| onebit | 29.28/0.237 | 30.30/0.213 | 29.28/0.237 | 29.62/0.222 |
+| gamma | 32.63/0.156 | 33.22/0.147 | 32.84/0.148 | 34.24/0.118 |
+
+Measured: on inpainting, quantisation and one-bit the input error is nearly uniform across the operator's coordinates (e.g. one-bit 0.32-0.35 rms per
+group), so this noise is practically white there (results equal the white arm). It varies strongly only on deblur (0.06-0.39), HDR step 1 and CT.
+Not supported as a replacement for the tilt: below the tilt in PSNR on all 9 tasks (same power). Exception to follow up: tone curve with total = told
+level, 34.24/0.118 (+1.0 dB) - a level effect (less injected noise), not a colouring effect (same-power arm 32.84).
+JPEG, nonlinear deblur, blur+clip, blur+quantise not run (composite coordinates).

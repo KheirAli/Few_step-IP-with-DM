@@ -887,7 +887,7 @@ state = {"img": S0 - 1, "stats": [], "gt": None, "speclog": {}}
 NOISE = os.environ.get("NOISE", "white"); NB = 64
 SPECFILE = os.path.abspath(f"../mode_probe/{os.environ.get('SPECDIR', 'spec_unified')}/{deg}.json")
 SPEC = {}
-if NOISE == "shape" and os.path.exists(SPECFILE):
+if NOISE in ("shape", "fire") and os.path.exists(SPECFILE):
     SPEC = {k: torch.tensor(v) for k, v in json.load(open(SPECFILE)).items()}
 _FB = {}
 
@@ -901,12 +901,73 @@ def _bands(dev):
     return _FB[dev]
 
 
+# ---- NOISE=fire (2026-11-24): coloured renoising in the OPERATOR's coordinates (after FIRE, Bendel et al. 2025) -------------------------
+# The error of the model input r = z + u is far from white in the operator's coordinates (small where the measurement is informative).  Its power
+# C_b is tabulated per coordinate group b on generated images (NOISE=firecal; groups: singular-value bins for linear operators, measurement-value
+# bins for pointwise operators), and noise of variance lambda_b is injected so that error + noise is white:
+#   FIRE_MODE=budget : lambda_b = max(sigma^2 + mean C - C_b, 0), rescaled to mean sigma^2 (same injected power as the shipped noise; told level unchanged)
+#   FIRE_MODE=exact  : lambda_b = max(told^2 - C_b, 0)                (total = the level the model is told; FIRE's rule)
+FIRE_MODE = os.environ.get("FIRE_MODE", "budget"); FIRE_NB = 24
+
+
+def _fire_setup(P, like):
+    if getattr(P, "_fire", None) is None:
+        dev = like.device; NBf = FIRE_NB
+        if NEWOP == "ct" and "V" in _CTSVD:
+            sv = _CTSVD["s2"].sqrt(); b = 1 + (sv / sv.max() * (NBf - 1)).clamp(max=NBf - 1 - 1e-4).floor().long(); n0 = 65536 - sv.numel()
+            cnt = torch.bincount(b, minlength=NBf).float() * 3; cnt[0] = 3 * n0; P._fire = ("ct", b, cnt)
+        elif P.ATy is not None and hasattr(P.F, "singulars"):
+            sv = _svd_parts(P)[0]; b = torch.where(sv <= 1e-6 * sv.max(), torch.zeros_like(sv), 1 + (sv / sv.max() * (NBf - 1)).clamp(max=NBf - 1 - 1e-4).floor()).long()
+            P._fire = ("lin", b, torch.bincount(b, minlength=NBf).float())
+        elif P.y is not None and P.y.shape == like.shape:
+            b = ((P.y.clamp(-1.3, 1.3) + 1.3) / 2.6 * NBf).clamp(max=NBf - 1e-3).floor().long().flatten(); P._fire = ("pix", b, torch.bincount(b, minlength=NBf).float())
+        else:
+            P._fire = ("none", None, None); print("FIRE: no operator coordinates for this task - white noise", flush=True)
+    return P._fire
+
+
+def fire_spec(P, e):
+    """Per-group SUM of squared error coefficients in the operator's coordinates."""
+    kind, b, cnt = _fire_setup(P, e)
+    if kind == "ct":
+        V_ = _CTSVD["V"]; ef = e.reshape(3, -1).float(); c = ef @ V_; nul = ef - c @ V_.T; sp = torch.zeros(FIRE_NB, device=e.device).index_add_(0, b.repeat(3), (c ** 2).flatten()); sp[0] = (nul ** 2).sum(); return sp
+    c = P.F.Vt(e)[0] if kind == "lin" else e.flatten()
+    return torch.zeros(FIRE_NB, device=e.device).index_add_(0, b, c.float() ** 2)
+
+
+def fire_inject(r, sig, key, w):
+    P = state["P"]; kind, b, cnt = _fire_setup(P, r)
+    if kind == "none":
+        return w * sig
+    if NOISE == "firecal":
+        sm = fire_spec(P, r - state["gt"].to(r.device)); state["speclog"].setdefault(key, []).append(torch.cat([sm, cnt]).cpu().tolist())
+    elif key in SPEC:
+        sm = SPEC[key][:FIRE_NB].to(r.device) * cnt / SPEC[key][FIRE_NB:].to(r.device).clamp(min=1e-6)       # tabulated mean power per group x this image's group sizes
+    else:
+        return w * sig
+    C = sm / cnt.clamp(min=1); wt = cnt / cnt.sum(); Cb = float((wt * C).sum())
+    if FIRE_MODE == "exact":
+        lam = (float(state.get("told", sig)) ** 2 - C).clamp(min=0)
+    else:
+        lam = (sig ** 2 + Cb - C).clamp(min=0); lam = lam * sig ** 2 / float((wt * lam).sum().clamp(min=1e-12))
+    if state["img"] < S0 + 1 and NOISE == "fire":
+        print(f"FIRE step {key}: sigma {sig:.3f} told {float(state.get('told', sig)):.3f} rms error of the input {Cb ** 0.5:.3f}; error rms per group min {float(C[cnt > 0].min()) ** 0.5:.3f} max {float(C[cnt > 0].max()) ** 0.5:.3f}; injected rms {float((wt * lam).sum()) ** 0.5:.3f}", flush=True)
+    g = lam.sqrt()
+    if kind == "ct":
+        V_ = _CTSVD["V"]; wf = w.reshape(3, -1).float(); c = wf @ V_; return (g[0] * (wf - c @ V_.T) + (g[b][None] * c) @ V_.T).reshape(w.shape).to(w.dtype)
+    if kind == "lin":
+        return P.F.V((g[b] * P.F.Vt(w)[0])[None]).reshape(w.shape)
+    return (g[b] * w.flatten()).reshape(w.shape)
+
+
 def inject(r, sig, pas, step, pr):
     """Noise to add to r = z + u at this step."""
     w = torch.randn_like(r)
     sig = float(sig)
     if (NOISE == "white" and TILT == 0 and not NBG) or sig < 0.05:
         return w * sig
+    if NOISE in ("fire", "firecal"):
+        return fire_inject(r, sig, f"{pas}_{step}", w)
     if NOISE == "white" and NBG:                               # one power gain per octave band (the 8 bands of the combination), total power unchanged
         g2 = torch.tensor(NBG, device=r.device)[lle_band_index(256, len(NBG), r.device)]
         return torch.fft.ifft2(torch.fft.fft2(w, norm="ortho") * (g2 / g2.mean()).sqrt() * sig, norm="ortho").real
@@ -1500,6 +1561,7 @@ def run_steps(P, model, st, sched, idx, nfe, pas=0):
             xt, calls = explore_step(model, zt, ut_m, xt, sig_t[i], sig_cm[i], deg == "phase_retrieval")
             nfe[0] += calls
         else:
+            state["P"] = P; state["told"] = float(sig_cm[i])
             nz = inject(zt + ut_m, sig_t[i], pas, i, deg == "phase_retrieval")
             if NULLNOISE and P.ATy is not None:
                 # noise only where the measurement says little: "hard" = none in the measured directions; "keep" = same, rescaled to the same total power
@@ -1768,7 +1830,7 @@ def finish(x, rec, x_first=None):
                 "steps": list(STEPLOG) if SAVE_STEPS else None}, f"{exp}/raw_{state['img']}.pt")
     STEPLOG.clear()
     json.dump(state["stats"], open(f"{exp}/stats.json", "w"))
-    if NOISE == "calib":                                      # running mean table per (pass, step)
+    if NOISE in ("calib", "firecal"):                         # running mean table per (pass, step)
         os.makedirs(os.path.dirname(SPECFILE), exist_ok=True)
         import numpy as _np
         json.dump({k: _np.mean(v, 0).tolist() for k, v in state["speclog"].items()}, open(SPECFILE, "w"))
