@@ -85,14 +85,30 @@ LSUN bedroom (58 images): ours 24.10/0.380 and 25.46/0.319; DAPS 23.85/0.403 and
 
 ## Known limits (read before quoting numbers)
 
-- One run per method; 107 (CelebA-HQ) and 58 (bedroom) test images. 104 of the 107 CelebA-HQ test images exist in CelebA-HQ itself.
-- Some CelebA-HQ settings were chosen on real selection images (one overlaps the test set) or on the test set; they are being redone on
-  generated images only (`clean_protocol.py`, `pr_clean.py`; unmasked phase retrieval already redone).
-- DPS / DAPS use step sizes borrowed from their face settings; PnP-CM on bedroom uses CelebA-HQ hyperparameters.
-- Part of the gap to PnP-CM comes from the shared components (extrapolation / combination, noise tilt), not from the data step alone;
-  `attribution.py` isolates the data step.
-- On LPIPS, PnP-CM or DPS is better on SR, Gaussian deblur, nonlinear deblur and JPEG.
-- Two-piece (tier 2) data steps are exact per piece, not as a joint solve; the phase-retrieval starting stages are iterative (no model calls).
+An independent check of code, protocol and claims is in `mode_probe/AGENT_CHECK.md`; the points below include its findings.
+
+- **What the data step buys.** In an ablation with the identical pipeline and only the data step swapped (`attribution.py`), a gradient solver with
+  tuned learning rate and iteration count matches the closed-form step on HDR, tone curve and quantisation (it is 0.24 dB better on quantisation);
+  the closed form leads on one-bit (+0.6 dB) and blur then clip (+0.4 dB). The data step's contribution is speed (1.5-15x at equal model calls) and
+  no solver tuning. Most of the gap to PnP-CM comes from the shared components (combination of step outputs, noise tilt, calibrated schedule).
+- **"One closed-form update" is not literally what every row uses.** The frequency-weighted fit (`FW=1`, chosen for 7 of 14 tasks) repeats the
+  closed form 7 times per step (with the true-operator correction on nonlinear deblur: 7 operator calls per step); blur then clip / quantise
+  alternate two closed forms 8 times per step; the phase-retrieval data steps are single splitting steps, not exact minimisers; the phase-retrieval
+  starting stages are iterative (no model calls). None of these uses a learning rate or the operator's gradient.
+- **Protocol.** Choices within each task's candidate list are made on model-generated images and the test set is used once. But the candidate
+  lists, base schedules and the choice of the "8 bands + data-fit term" combination came from earlier work in which test numbers were visible.
+  `mean_face01.pt` (channel signs in masked phase retrieval, start for coded diffraction) was the mean of 100 REAL images, two of them test images;
+  it is replaced by the mean of generated images (`mean_face_gen.pt`, now the default) and the two results are being rerun. The regression start for
+  unmasked phase retrieval was originally selected on 12 test images; reselected on held-out model samples it is the same regression within the
+  feature set the code supports.
+- One run per method; 107 (CelebA-HQ) and 58 (bedroom) test images; differences below about 0.2 dB should not be read as wins.
+  104 of the 107 CelebA-HQ test images exist in CelebA-HQ itself.
+- DPS / DAPS use step sizes borrowed from their face settings; PnP-CM on bedroom uses CelebA-HQ hyperparameters; PnP-CM was not given the band
+  combination or the noise tilt.
+- LPIPS: another method is better on SR, Gaussian deblur, inpainting, nonlinear deblur, JPEG, blur then quantise, blur then clip, nonlinear CT at
+  30 views and unmasked phase retrieval.
+- Timing of unmasked phase retrieval: 2.3 s was measured with the 40-pass loop on a free GPU; the clean-protocol setting (80 passes) is slower.
+- Nonlinear deblur is outside the operator class (see `mode_probe/ATTEMPTS.md`).
 
 ## Two-server workflow
 

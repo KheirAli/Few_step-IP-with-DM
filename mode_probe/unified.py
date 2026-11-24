@@ -236,7 +236,7 @@ def prd_setup(y):
     def mean_init():
         # warm start from the PRIOR, not from the measurement alone: measured magnitudes combined with the Fourier phases of the
         # average face of 100 other images.  This fixes the orientation and gives the right coarse layout.
-        m = torch.load(os.path.abspath("../mode_probe/mean_face01.pt")).to(y.device)
+        m = torch.load(os.path.abspath("../mode_probe/" + os.environ.get("MEANFACE", "mean_face_gen.pt"))).to(y.device)
         Fm = _FU.fft2_m(torch.nn.functional.pad(m, (64, 64, 64, 64)))
         return (_FU.ifft2_m(amp * torch.exp(1j * torch.angle(Fm))).real.clamp(0, 1) * S)[..., 64:320, 64:320] * 2 - 1
 
@@ -2059,7 +2059,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
             # sign of each colour channel WITHOUT the truth.  "corr": natural images have positively correlated colour channels, so the
             # channels are flipped to agree with each other; the remaining global sign, and "prior" for every channel, is set by the
             # correlation with the mean face of the consistency model's own samples (kept pixels only).
-            mf = torch.load(os.path.abspath("../mode_probe/mean_face01.pt")).to(dev).float(); mf = (mf if mf.dim() == 4 else mf[None]) * 2 - 1; mf = mf - mf.mean(dim=(2, 3), keepdim=True)
+            mf = torch.load(os.path.abspath("../mode_probe/" + os.environ.get("MEANFACE", "mean_face_gen.pt"))).to(dev).float(); mf = (mf if mf.dim() == 4 else mf[None]) * 2 - 1; mf = mf - mf.mean(dim=(2, 3), keepdim=True)
             xc = xo - (xo * w).sum(dim=(2, 3), keepdim=True) / w.sum(dim=(2, 3), keepdim=True) * 0          # (no centring: a flip also flips the mean)
             if os.environ["PRSIGN"] == "prior":
                 sg = torch.sign((xc * mf * w).sum(dim=(2, 3), keepdim=True))
@@ -2184,7 +2184,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         elif NEWOP == "ct":
             Pb.prox = ct_prox(y); w0 = ct_prox(y, 40)(torch.zeros(1, 3, 256, 256, device=dev), float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: regularised least squares, no model
         elif NEWOP in ("prsq", "prcdp"):
-            Pb.prox = priso_prox(y, NEWOP == "prcdp"); mf_ = torch.load(os.path.abspath("../mode_probe/mean_face01.pt")).to(dev).float(); mf_ = (mf_ if mf_.dim() == 4 else mf_[None]) * 2 - 1
+            Pb.prox = priso_prox(y, NEWOP == "prcdp"); mf_ = torch.load(os.path.abspath("../mode_probe/" + os.environ.get("MEANFACE", "mean_face_gen.pt"))).to(dev).float(); mf_ = (mf_ if mf_.dim() == 4 else mf_[None]) * 2 - 1
             w0 = mf_                                                # start: the mean face of model samples (its phases); no search stage
             for _ in range(int(os.environ.get("PR_ISO_WARM", "0"))):   # optional classical warm-up: repeated magnitude fits (Gerchberg-Saxton style)
                 w0 = Pb.prox(w0, 0.0)

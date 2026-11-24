@@ -42,7 +42,10 @@ frequency) is fitted to the network on 8 calibration images; each step solves th
 corrected by the true operator's mismatch at the current image (`y - (A(v) - K v)`, one operator call per step). Result: 26.35 / 0.333.
 
 **Attempt 2 (mapping into the class: "linear filter, then a per-pixel curve", `y ~ g(K x)`).** Tested with `NLDIAG=1`: on 8 held-out
-calibration images the linear filter leaves 7.6% of the operator output unexplained, and adding a fitted monotone per-pixel curve leaves 7.6%
-(no reduction). The network's departure from linearity is not coordinate-wise, so this mapping gives nothing; attempt 1 stands.
-Consequence for the paper: nonlinear deblur is "92% linear" and is handled as a tier-1 linear problem with a model-error correction; it is the
-one task whose nonlinearity is not in the class.
+calibration images the linear filter leaves 7.6% of the operator output unexplained, and a fitted per-pixel curve after the filter leaves 7.6%
+(no reduction; confirmed by the independent check with a finer curve, no monotone constraint, and a cross-channel map). So this mapping gives nothing
+and attempt 1 stands.
+Interpretation (corrected after the independent check, `AGENT_CHECK.md`): the 7.6% is mostly the SURROGATE's error, not nonlinearity - 64% of it sits
+in the 24-pixel border (circular filter against the network's padding); a direct midpoint test puts the network's departure from affine at about 3%.
+What can be said: the learned blur is close to affine but not well modelled by a circular shift-invariant filter, and a per-pixel curve does not help;
+we use the linear closed form with a per-step correction from the true operator.

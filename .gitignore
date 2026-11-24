@@ -17,6 +17,7 @@
 !/mode_probe/*.json
 /mode_probe/unified_pre_*.py
 !/mode_probe/mean_face01.pt
+!/mode_probe/mean_face_gen.pt
 !/mode_probe/reg_best.pt
 !/mode_probe/reg_resstd.pt
 # ct_svd_*.pt (2.5-5 GB) is rebuilt in about a minute with mode_probe/ct_svd.py <views>
