@@ -14,14 +14,15 @@ in {-1, 0, +1} (1 pixel in 4 kept), `P` = zero padding 256 -> 512, `F` = unitary
 1. Classical hybrid input-output on the known support, 4 starts x 1000 iterations, FFTs only -> the kept pixels (up to a sign per colour channel).
 2. Sign per channel from positive correlation with the mean face of model samples (`PRSIGN=prior`).
 3. The kept pixels are treated as a LINEAR measurement (inpainting, 25% of the pixels); 4 model calls with the closed-form linear data step.
-Result (clean protocol, as produced): 28.20 / 0.273.
+Result (clean protocol, as produced): 28.20 / 0.273 with the real-image mean face; 28.38 / 0.270 with the mean face of generated images (current).
 
 **Attempt 2 (inside the class, tier 2).** Add `PR2=1 [PR2_RS=r]`. Same start (steps 1-2). In the sampler the data step uses the TRUE
 operator: `L = F P D` is linear and `L'L = D^2` is diagonal in pixels, `f = |.|` is coordinate-wise.
 - piece 1, per Fourier coefficient: keep the phase of `c = (L v)_k`, magnitude `(y_k + r |c|) / (1 + r)`;
 - piece 2, back to the image, diagonal in pixels: kept pixels take `D * crop(F^-1 u)`, the others keep `v`.
 Applied once per step (`_prox_pr2` in `unified.py`). The start is still a search stage, as the ambiguity check predicts for magnitudes.
-Result: see `RESULTS_structured_combinations.md` (run `attempt2.py`).
+Results (107 test images, as produced): 28.11 / 0.268 without the frequency-weighted fit (`attempt2.py`, coupling 0.3);
+28.57 / 0.270 with it (`pr2fw.py`, coupling 0.1, `FW=1 FWP=0.5`; like for like with attempt 1). On generated images 29.26 against 28.64.
 
 ## 2. Unmasked phase retrieval (DPS / DAPS task)
 
@@ -33,7 +34,8 @@ per-coefficient magnitude fit. Results: 23.62/0.369, 24.38/0.336 (training-free)
 
 **Attempt 2 (non-iterative).** `PRD_INIT=netdirect PRD_TV=0 PRD_NETR=32`: one pass of the phase predictor -> hypothesis with the best
 low-frequency magnitude match -> coarse image = inverse transform of (measured magnitude x predicted phase) -> 4 / 8 model calls.
-Results without the shared components: 22.87/0.385, 23.72/0.345, no failures. With noise tilt, tuned schedule and the band combination: `attempt2.py`.
+Results without the shared components: 22.87/0.385, 23.72/0.345, no failures. With noise tilt 0.5, tuned schedule and the band combination (`attempt2.py`): 23.63/0.377, 25.01/0.336, no failures.
+Attempt 1 with the same components (`pr_today.py`): 24.18/0.371, 25.18/0.328 (training-free); 24.63/0.362, 25.69/0.317 (with predictor).
 
 ## 3. Nonlinear deblur (learned blur network)
 
