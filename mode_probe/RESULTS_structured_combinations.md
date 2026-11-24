@@ -205,3 +205,9 @@ Ours = CelebA-HQ settings unchanged, combination weights refitted on generated b
 
 No formula for the operator: it is evaluated once on 257 constant images, giving a per-pixel table; the data-fit is the exact grid minimiser. 107 test images, 4 calls, no combination step, PSNR/LPIPS, hand-derived formula vs black-box:
 HDR 23.18/0.357 vs 23.21/0.356; quantisation 28.37/0.268 vs 28.41/0.266; one-bit (nearest-value version) 23.88/0.358 vs 23.84/0.358; tone curve 28.28/0.235 vs 28.28/0.235; wrap-around 9.47/0.707 vs 9.47/0.707 (fails either way).
+
+# Ambiguity check for coordinate-wise measurement functions (2026-11-24, `ambiguity.py`)
+
+Share of coordinates for which the plausible values (objective within 4 sigma_y^2 of the best) form 2+ separate pieces, when the current estimate is off by 0.5 / 0.15 of the half-range:
+HDR 0.3% / 0.1%; quantisation 2.8% / 2.1%; one-bit 0.0% / 0.0%; tone curve 0.0% / 0.0%; exponential attenuation (CT ray) 0.0% / 0.0%; wrap-around 86.9% / 0.6%; magnitude with the sign lost 49.5% / 3.8%.
+The two operators flagged (wrap-around, magnitude) are the two on which the method fails without a starting-point search.
