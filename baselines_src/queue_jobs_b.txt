@@ -1,0 +1,20 @@
+DPSC nonlinear_deblur_n01
+DAPSC pr_masked
+DPSC pr_masked
+DAPSC phase_retrieval
+DPSC phase_retrieval
+DAPSC ct60
+DPSC ct60
+DPSC ct30
+DAPSC ctnl30
+DPSC ctnl30
+DAPSC ctnl60
+DPSC ctnl60
+DAPSC blurclip
+DPSC blurclip
+DAPSC gamma04
+DPSC gamma04
+DAPSC blurq
+DPSC blurq
+DAPSC nonlinear_blur n01
+DAPSC jpeg5

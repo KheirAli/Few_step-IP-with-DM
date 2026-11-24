@@ -40,8 +40,10 @@ os.makedirs(exp, exist_ok=True)
 for sub, src in [("logs", "exp/logs"), ("datasets", DATA or "exp/datasets"), ("inpainting_masks", "exp/inpainting_masks")]:
     if not os.path.exists(f"{exp}/{sub}"):
         os.symlink(os.path.abspath(src), f"{exp}/{sub}")
-sys.argv = ["main.py"] + sys.argv[2:] + [f"--subset_start={S0}", f"--subset_end={S1E}", "--path_y=celeba_hq",
-                                         "--sigma_y=0.05", "--config=celeba_hq_256.yml", "--save_y", f"--exp={exp}"]
+# DSET=bedroom : LSUN bedroom (the consistency model PnP-CM uses for natural scenes); default CelebA-HQ
+DSET = os.environ.get("DSET", "celeba"); DSET_PATH, DSET_CFG, DSET_CKPT = {"celeba": ("celeba_hq", "celeba_hq_256.yml", ""), "bedroom": ("bedroom", "lsun_bedroom_256.yml", "lsun_bedroom/cd_bedroom256_lpips.pt")}[DSET]
+sys.argv = ["main.py"] + sys.argv[2:] + [f"--subset_start={S0}", f"--subset_end={S1E}", f"--path_y={DSET_PATH}",
+                                         "--sigma_y=0.05", f"--config={DSET_CFG}", "--save_y", f"--exp={exp}"] + ([f"--model_ckpt={DSET_CKPT}"] if DSET_CKPT else [])
 
 import functions.diff_jpeg as dj
 
@@ -158,6 +160,54 @@ class _PRDapsOp:
         import functions.fft_util as _FU
         return 2 * _FU.fft2_m(torch.nn.functional.pad(x * 0.5 + 0.5, (64, 64, 64, 64))).abs()
     forward = A
+
+
+PR_MASKS = int(os.environ.get("PR_MASKS", "2")); _PRM = {}
+
+
+def _pr_masks(dev):
+    """K fixed random phase masks (unit modulus).  T = stack_k F D_k / sqrt(K) satisfies T'T = I."""
+    if dev not in _PRM:
+        g_ = torch.Generator(device="cpu").manual_seed(777); _PRM[dev] = torch.exp(2j * math.pi * torch.rand(PR_MASKS, 1, 256, 256, generator=g_)).to(dev)
+    return _PRM[dev]
+
+
+class _PRSqOp:
+    """Fourier magnitudes of the UNPADDED image (square unitary transform): the per-coefficient formula is the exact data-fit."""
+    def __init__(self, *a, **k):
+        self.blur_model = nn.Identity()
+
+    def A(self, x, **k):
+        return 2 * torch.fft.fft2(x * 0.5 + 0.5, norm="ortho").abs()
+    forward = A
+
+
+class _PRCdpOp:
+    """Coded diffraction: magnitudes of F(D_k x) for PR_MASKS random phase masks, placed side by side along the width."""
+    def __init__(self, *a, **k):
+        self.blur_model = nn.Identity()
+
+    def A(self, x, **k):
+        D = _pr_masks(x.device); return 2 * torch.cat([torch.fft.fft2(D[k_] * (x * 0.5 + 0.5), norm="ortho").abs() for k_ in range(PR_MASKS)], -1)
+    forward = A
+
+
+def priso_prox(y, coded):
+    """Amplitude data-fit on an isometry.  Per coefficient: keep the phase, magnitude = (a + r|c|)/(1 + r) (exact minimiser of
+    (1/2)(|u| - a)^2 + (r/2)|u - c|^2), then back with T' and the real part.  Exact image-space data-fit for the square transform."""
+    amp = y / 2
+
+    def prox(v, rho):
+        g = v * 0.5 + 0.5; r4 = 4.0 * float(rho)
+        if not coded:
+            c = torch.fft.fft2(g, norm="ortho"); u = c / (c.abs() + 1e-8) * (amp + r4 * c.abs()) / (1 + r4)
+            return torch.fft.ifft2(u, norm="ortho").real.clamp(0, 1) * 2 - 1
+        D = _pr_masks(v.device); out = 0
+        for k_ in range(PR_MASKS):
+            c = torch.fft.fft2(D[k_] * g, norm="ortho"); a_ = amp[..., 256 * k_:256 * k_ + 256]; u = c / (c.abs() + 1e-8) * (a_ + r4 * c.abs()) / (1 + r4)
+            out = out + (D[k_].conj() * torch.fft.ifft2(u, norm="ortho")).real
+        return (out / PR_MASKS).clamp(0, 1) * 2 - 1
+    return prox
 
 
 def prd_setup(y):
@@ -485,6 +535,36 @@ def split_prox(pw, n=8):
     return prox
 
 
+def blurclip_active(y, n_out=3, n_cg=25):
+    """ACTIVE-SET data-fit for  y = clip(2 H x) + noise,  min (1/2)|clip(2Hz) - y|^2 + (rho/2)|z - v|^2.
+    Once it is fixed which measurements are saturated, the problem is a QUADRATIC one: unsaturated pixels give equations 2(Hz)_i = y_i, saturated
+    pixels give inequalities (2(Hz)_i >= 1 or <= -1) that cost nothing while they hold.  The set is predicted from the measurement and the current
+    image, the quadratic problem is solved (conjugate gradients: mask and blur do not share a basis), the inequalities are checked, violated ones
+    are made active (2(Hz)_i = +-1), satisfied active ones released, and the solve repeated (n_out rounds).  No model calls."""
+    tau = 2 * SIGY; hi = y >= 1 - tau; lo = y <= -1 + tau; un = ~(hi | lo)
+
+    def prox(v, rho):
+        rho = float(rho); z = v.clone(); info = None
+        for _ in range(n_out):
+            b_ = 2 * _gblur(z); act_hi = hi & (b_ < 1); act_lo = lo & (b_ > -1); M = (un | act_hi | act_lo).to(v.dtype)
+            t_ = torch.where(un, y, torch.where(act_hi, torch.ones_like(y), -torch.ones_like(y)))
+            op = lambda q: 4 * _gblur(M * _gblur(q)) + rho * q; rhs = 2 * _gblur(M * t_) + rho * v
+            r = rhs - op(z); p_ = r.clone(); rs = (r * r).sum()
+            for _ in range(n_cg):
+                Ap = op(p_); al = rs / (p_ * Ap).sum().clamp(min=1e-20); z = z + al * p_; r = r - al * Ap; rn = (r * r).sum()
+                if float(rn) < 1e-10 * float((rhs * rhs).sum()):
+                    break
+                p_ = r + (rn / rs) * p_; rs = rn
+            info = (float(act_hi.float().mean() + act_lo.float().mean()), float((hi | lo).float().mean()))
+        state["bc_active"] = info
+        return z
+    return prox
+
+
+def _bc_obj(y, z, v, rho):
+    return float(0.5 * (((2 * _gblur(z)).clamp(-1.0, 1.0) - y) ** 2).sum() + 0.5 * float(rho) * ((z - v) ** 2).sum())
+
+
 # ---- sparse-view computed tomography (2026-11-20): parallel-beam Radon transform, CT_K views over 180 degrees ----
 CT_K = int(os.environ.get("CT_K", "60"))
 
@@ -656,7 +736,7 @@ def mri_prox(y):
     return prox
 
 
-_OPS = {"prdaps": _PRDapsOp, "hdr": _HDROp, "quant": _QuantOp, "onebit": _OneBitOp, "blind": _BlindOp, "haze": _HazeOp, "ct": _CTOp, "mri": _MRIOp, "ctnl": None,
+_OPS = {"prdaps": _PRDapsOp, "hdr": _HDROp, "quant": _QuantOp, "onebit": _OneBitOp, "blind": _BlindOp, "haze": _HazeOp, "ct": _CTOp, "mri": _MRIOp, "ctnl": None, "prsq": _PRSqOp, "prcdp": _PRCdpOp,
         "gamma": _GammaOp, "mod": _ModOp, "blurclip": _BlurClipOp, "blurq": _BlurQOp}
 if NEWOP:
     import functions.measurements as _FMM
@@ -1601,7 +1681,7 @@ def finish(x, rec, x_first=None):
         rec["sign_ok"] = state.pop("sign_ok")
     if state.get("reslog"):
         rec["reslog"] = state.pop("reslog")
-    for k_ in ("diag2", "damp_a", "disc_rho", "diag3", "prdJ"):
+    for k_ in ("diag2", "damp_a", "disc_rho", "diag3", "prdJ", "bcJ", "bc_active"):
         if state.get(k_):
             rec[k_] = state.pop(k_)
     if CALW and state.get("calacc"):
@@ -2027,11 +2107,16 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
                 rec["psnr_all"] = [r_[1]["psnr"] for r_ in runs]; rec["psnr_avg"] = _ps(torch.stack([r_[0] for r_ in runs]).mean(0), gt_)
         torch.cuda.synchronize(); rec["time_total"] = time.time() - t_entry
         return finish(x, rec, xf)
-    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri", "ctnl") and (SOLVER != "repo" or NEWOP in ("ct", "ctnl")):
+    if NEWOP in ("quant", "onebit", "blind", "haze", "gamma", "mod", "blurclip", "blurq", "ct", "mri", "ctnl", "prsq", "prcdp") and (SOLVER != "repo" or NEWOP in ("ct", "ctnl", "prsq", "prcdp")):
         if NEWOP == "mri":
             Pb.prox = mri_prox(y); w0 = torch.fft.ifft2(_mri_mask(dev) * torch.complex(y[..., :256], y[..., 256:]), norm="ortho").real.clamp(-1.0, 1.0)   # start: zero-filled
         elif NEWOP == "ct":
             Pb.prox = ct_prox(y); w0 = ct_prox(y, 40)(torch.zeros(1, 3, 256, 256, device=dev), float(os.environ.get("CT_R0", "0.05"))).clamp(-1.0, 1.0)   # start: regularised least squares, no model
+        elif NEWOP in ("prsq", "prcdp"):
+            Pb.prox = priso_prox(y, NEWOP == "prcdp"); mf_ = torch.load(os.path.abspath("../mode_probe/mean_face01.pt")).to(dev).float(); mf_ = (mf_ if mf_.dim() == 4 else mf_[None]) * 2 - 1
+            w0 = mf_                                                # start: the mean face of model samples (its phases); no search stage
+            for _ in range(int(os.environ.get("PR_ISO_WARM", "0"))):   # optional classical warm-up: repeated magnitude fits (Gerchberg-Saxton style)
+                w0 = Pb.prox(w0, 0.0)
         elif NEWOP == "ctnl":
             if CTNL_MODE in ("poisson", "poislog"):              # the wrapper added Gaussian noise of 0.1 counts (negligible); draw the photon counts
                 gp_ = torch.Generator(device="cpu").manual_seed(1234 + int(state.get("img", 0))); y = torch.poisson(y.clamp(min=0.0).cpu(), generator=gp_).to(dev); Pb.y = y
@@ -2046,6 +2131,14 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
                 w0 = (unwrap_ls(y) / 2).clamp(-1.0, 1.0)
         elif NEWOP == "blurclip":
             Pb.prox = split_prox(ev_fit(lambda s_: (2 * s_).clamp(-1.0, 1.0), y) if SPLIT_EV > 0 else hdr_prox(y)); w0 = (y / 2).clamp(-1.0, 1.0)
+            if os.environ.get("BC_MODE", "") == "active":
+                Pb.prox = blurclip_active(y)
+            if os.environ.get("BC_JLOG", "0") == "1":             # log the TRUE data-fit objective reached by whichever data-fit is used
+                _p0 = Pb.prox
+
+                def _plog(v_, rho_, _p0=_p0):
+                    z_ = _p0(v_, rho_); state.setdefault("bcJ", []).append([_bc_obj(y, v_, v_, rho_), _bc_obj(y, z_, v_, rho_)]); return z_
+                Pb.prox = _plog
         elif NEWOP == "blurq":
             Pb.prox = split_prox(quant_prox(y)); w0 = y.clamp(-1.0, 1.0)
         elif NEWOP == "onebit":

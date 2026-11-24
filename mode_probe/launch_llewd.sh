@@ -12,8 +12,8 @@ g=${GOFF:-0}; runone() { local tag=$1 D=$2 SH=$3 task=$4 mode=$5; c=(${CFG[$task
 fit() { local K=$1 src=$2 task=$3 mode=$4; c=(${CFG[$task]}); CUDA_VISIBLE_DEVICES=$(( ${GOFF:-0} % NGPU )) $P $L/lle_fit2.py ${TAG}cal${K}_${src}_${task}_${c[0]} $L/lle/${TAG}_${mode}_${task}.pt $K $mode $([ $task = prmask ] && echo pr) 2>&1 | grep -E "LLEFIT2|Error"; }
 rm -f $L/lle/${TAG}_*.pt
 # round 1: no weights exist yet, so one run ("base") serves every mode
-for task in $TASKS; do runone cal1 $L/data_gen512 "${CALSH:-0:256 256:512}" $task base; done; wait
+for task in $TASKS; do runone cal1 ${CALDATA:-$L/data_gen512} "${CALSH:-0:256 256:512}" $task base; done; wait
 for task in $TASKS; do for mode in $MODES; do fit 1 base $task $mode; done; done; rm -rf $L/exp_fin_${TAG}cal1_*
-for K in $(seq 2 $((NSTEP-1))); do for task in $TASKS; do for mode in $MODES; do runone cal$K $L/data_gen512 "${CALSH:-0:256 256:512}" $task $mode; done; done; wait
+for K in $(seq 2 $((NSTEP-1))); do for task in $TASKS; do for mode in $MODES; do runone cal$K ${CALDATA:-$L/data_gen512} "${CALSH:-0:256 256:512}" $task $mode; done; done; wait
   for task in $TASKS; do for mode in $MODES; do fit $K $mode $task $mode; done; done; rm -rf $L/exp_fin_${TAG}cal${K}_*; done
-for task in $TASKS; do for mode in $MODES; do runone test $L/data_paper "${TESTSH:-0:54 54:107}" $task $mode; done; done; wait; echo ALLDONE
+for task in $TASKS; do for mode in $MODES; do runone test ${TESTDATA:-$L/data_paper} "${TESTSH:-0:54 54:107}" $task $mode; done; done; wait; echo ALLDONE

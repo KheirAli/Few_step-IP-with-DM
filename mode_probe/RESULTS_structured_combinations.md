@@ -136,3 +136,14 @@ Nonlinear CT, number of alternations inside the data-fit (tuned config, zband8 r
 | 1 pass (no alternation, coupling weight 2) | 26.94/0.322 | 28.45/0.279 |
 | 4 passes | 27.58/0.280 | 28.88/0.246 |
 | 8 passes | 27.62/0.278 | 28.87/0.246 |
+
+# Round 3 (2026-11-23), `round3.py`; tuning on generated images, 107 test images, PSNR/LPIPS
+
+Nonlinear CT with NO alternation in the data-fit (one per-ray solve + one linear formula per step; penalty 0.03, coupling weight 1, sigma 0.90,0.45,0.59,0.17, told x1.5):
+scalar 26.66/0.295 (30 views), 27.93/0.251 (60 views); 8 bands + data-fit term **27.47/0.292**, **28.73/0.254**. (4-pass version 27.58/0.280, 28.88/0.246; DAPS 27.65/0.264, 28.55/0.254.)
+
+Coded-diffraction phase retrieval, 2 random phase masks (`NEWOP=prcdp`), start = mean face + 50 magnitude-fit passes, penalty 0.3, sigma 0.15,0.14,0.18,0.09, told x1.5:
+ours scalar 33.72/0.132, 8 bands + data-fit term **34.45/0.126**; PnP-CM gradient solver (learning rate chosen on generated images, its own schedule) 28.65/0.186.
+
+Blur then clip, data-fit variants: 8-pass split 22.49/0.446, expected-value split 23.62/0.433, active set (predicted clipped set + quadratic solve) 21.30/0.472.
+Unpadded Fourier magnitudes (square unitary transform, exact data-fit), 24 selection images: 13.33 dB (fails: the phase is not determined).
