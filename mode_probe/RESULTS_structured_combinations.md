@@ -271,3 +271,14 @@ PnP-CM's own real-MRI pipeline with its fastMRI BRAIN consistency model (trained
 | R = 8 | 23.46 ± 4.98 / 0.703 | 23.76 ± 4.87 / 0.709 |
 
 Only the noise tilt is tested here (the combination step is not wired into the real-MRI pipeline). Absolute values are low and spread widely across slices, as expected under the field-strength shift.
+
+# Unmasked phase retrieval (iterative start) with the shared components (2026-11-24, `pr_today.py`)
+
+Noise tilt 0.5, schedule tuned on generated images (4 calls: 1.80, 0.31, 0.17, 0.09), in-loop 8-band + data-fit combination fitted on 128 generated images. 107 test images x 3 noise draws, PSNR/LPIPS:
+
+| Version | 4 calls | 8 calls | Below 14 dB | Before these components |
+|---|---|---|---|---|
+| Training-free start | 24.18/0.371 | 25.18/0.328 | 0.6% / 0.9% | 23.62/0.369, 24.38/0.336 |
+| Predictor inside the fit | 24.63/0.362 | 25.69/0.317 | 0.0% | 24.07/0.356, 24.78/0.325 |
+
+DAPS (about 1000 calls): 26.70/0.308.
