@@ -170,3 +170,9 @@ Consistency model cd_bedroom256_lpips. Ours: every task's CelebA-HQ configuratio
 | gamma | 25.35/0.234 | 30.26/0.205 | 30.67/0.191 |
 | blurq | 22.47/0.474 | 23.06/0.466 | 23.53/0.428 |
 | blurclip | 21.37/0.467 | 22.61/0.479 | 22.70/0.445 |
+
+# Unmasked phase retrieval, CLEAN PROTOCOL (2026-11-24, `pr_clean.py`)
+
+All choices made on 24 model-generated images (classical loop 80 passes with offset; first noise level 1.0 for 4 calls, 1.5 for 8 calls; predictor radius 48), then 107 test images x 3 measurement-noise draws, PSNR/LPIPS:
+training-free 23.62/0.369 (4 calls), 24.38/0.336 (8 calls), 0.9% below 14 dB; learned phase predictor 24.07/0.356 (4), 24.78/0.325 (8), 0.0% below 14 dB.
+(Previous numbers, with settings chosen on test images: 23.14/0.387, 24.07/0.344; 23.75, 24.48.)

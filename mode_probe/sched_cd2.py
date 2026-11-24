@@ -8,6 +8,7 @@ import sys, os, glob, re, json, subprocess, shutil, numpy as np, torch
 from PIL import Image
 task = sys.argv[1]; OFF = int(sys.argv[2]) if len(sys.argv) > 2 else 0; L = "../mode_probe"; NI = 48
 src = open(f"{L}/sched_search.py").read(); exec(src[src.index("CFG = {"):src.index("deg, extra, base")])
+if os.path.exists(f"{L}/sched_cfg_extra.json"): CFG.update({k_: tuple(v_) for k_, v_ in json.load(open(f"{L}/sched_cfg_extra.json")).items()})
 deg, extra, base = CFG[task]; DATA = os.path.realpath(f"{L}/data_gen512"); dev = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 f_ = torch.fft.fftfreq(256) * 256; BI = torch.bucketize((f_[:, None] ** 2 + f_[None, :] ** 2).sqrt(), torch.tensor([1.5 * 2 ** k for k in range(7)])).reshape(-1).repeat(3)
 def score(tag, n, N):
@@ -15,6 +16,7 @@ def score(tag, n, N):
     for rf in sorted(glob.glob(f"{L}/exp_fin_{tag}_s0/raw_*.pt")):
         d = os.path.dirname(rf); i = int(re.findall(r"raw_(\d+)\.pt", rf)[0]); lab = glob.glob(f"{d}/image_samples/*/labels/orig_{i}.png"); R = torch.load(rf); S = {k: v[0].float() for _, k, v in R["steps"]}
         gt = torch.from_numpy(np.asarray(Image.open(lab[0]).convert("RGB")).astype(np.float32) / 255).permute(2, 0, 1) * 2 - 1
+        if task.startswith("prmask"): gt = gt * torch.sign((R["x_raw"][0].float() * gt).sum(dim=(1, 2), keepdim=True))      # channel signs are not identifiable
         H.append(torch.stack([S[100 + j] for j in range(N)] + [S[200 + N - 1]])); G.append(gt); P0.append(float(10 * torch.log10(1 / (((R["x_raw"][0].float().clamp(-1, 1) - gt) / 2) ** 2).mean())))
     if len(H) != n: return float("nan"), float("nan")
     Hf = torch.fft.fft2(torch.stack(H), norm="ortho").flatten(2); Gf = torch.fft.fft2(torch.stack(G), norm="ortho").flatten(1); T = Hf.shape[1]; idx = torch.arange(n); out = []
