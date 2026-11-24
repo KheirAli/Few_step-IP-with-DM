@@ -290,3 +290,103 @@ Non-iterative unmasked phase retrieval (predictor -> one inverse transform -> mo
 
 Masked phase retrieval inside the operator class (two-piece data step with the true operator, `PR2=1`, coupling 0.3, no frequency-weighted arm), 107 test images, as produced:
 28.11/0.268 (2.8% of images below 14 dB, i.e. a wrong channel sign) | attempt 1 (reduction to inpainting, frequency-weighted, generated mean face) 28.38/0.270.
+
+# Overnight queue, 24 November 2026 (`overnight.sh`); raw output
+
+## 1_masked_pr_attempt2
+
+P2 tuning on generated images: p2_0.1_plain: 28.82 -> 28.98 | p2_0.1_fw: 28.92 -> 29.26 | p2_0.3_plain: 28.83 -> 28.85 | p2_0.3_fw: 28.97 -> 29.06
+P2 chosen: prmask__p2_0.1_fw
+P2 TEST masked phase retrieval, attempt 2 (p2_0.1_fw), as produced: 28.57/0.270 (n=107) | attempt 1 (reduction to inpainting, generated mean face) 28.38/0.270
+
+## 2_new_modes
+
+| Task | 8 bands + last data-fit image (current) | 8 bands + all data-fit images | 8 bands x measurement region |
+|---|---|---|---|
+| hdr | 26.42/0.268 | 26.57/0.267 | 26.77/0.255 |
+| inpainting | 30.29/0.207 | 30.31/0.206 | 30.32/0.208 |
+| blurclip | 24.67/0.387 | 24.84/0.387 | 24.91/0.377 |
+| sr_bicubic | 28.28/0.297 | 28.32/0.297 | - |
+| quant | 31.31/0.182 | 31.34/0.180 | - |
+| onebit | 30.30/0.213 | 30.31/0.211 | - |
+| jpeg | 27.19/0.336 | 27.22/0.339 | - |
+| deblur_gauss | 29.98/0.253 | 29.98/0.251 | - |
+| gamma | 33.22/0.147 | 33.25/0.147 | - |
+
+## 3_mri_celeba
+
+CHOICE mri4: r1: 30.57->31.10 | r3: 30.60->30.77 || chosen r1, sigma 0.900 0.250 0.180 0.165, told x1.2
+CHOICE mri8: r1: 27.36->28.12 | r3: 27.38->27.87 || chosen r1, sigma 1.650 0.825 0.330 0.165, told x1.2
+| Task | Chosen on generated images | Clean protocol, test | Previous number |
+|---|---|---|---|
+| mri4 | r1; sigma 0.90 0.25 0.18 0.17; told x1.2 | 31.42/0.189 | - |
+| mri8 | r1; sigma 1.65 0.82 0.33 0.17; told x1.2 | 27.89/0.293 | - |
+
+## 4_bedroom_clean
+
+CHOICE sr_bicubic: plain: 27.51->27.63 | fw: 27.62->27.67 || chosen fw, sigma 0.465 0.245 0.165 0.165, told x1.5
+CHOICE deblur_gauss: plain: 29.37->29.39 | fw: 29.54->29.59 || chosen fw, sigma 0.327 0.238 0.010 0.165, told x1.5
+CHOICE inpainting: plain: 29.48->29.86 | fw: 29.82->30.23 || chosen fw, sigma 0.589 0.238 0.010 0.028, told x1.0
+CHOICE jpeg: soft: 26.21->26.46 | softfw: 26.49->26.79 | true: 26.49->26.77 || chosen softfw, sigma 2.290 1.028 0.351 0.015, told x1.5
+CHOICE deblur_nl: plain: 26.21->26.40 | fw: 26.57->26.69 || chosen fw, sigma 2.290 0.191 0.560 0.252, told x1.5
+CHOICE hdr: plain: 26.87->28.18 | rx2: 26.89->27.64 || chosen plain, sigma 0.208 0.191 0.308 0.252, told x1.0
+CHOICE quant: plain: 31.52->32.64 | fw: 31.77->32.53 || chosen plain, sigma 0.208 0.191 0.560 0.138, told x1.0
+CHOICE onebit: nearest: 26.50->26.88 | ev: 29.76->30.07 | evfw: 30.44->30.61 || chosen evfw, sigma 0.382 1.143 0.560 0.459, told x1.0
+CHOICE blurclip: split: 24.02->24.77 | ev: 25.15->25.45 || chosen ev, sigma 2.290 1.143 1.848 0.252, told x1.0
+CHOICE blurq: split: 25.83->26.03 || chosen split, sigma 0.208 2.095 0.560 0.252, told x1.5
+CHOICE gamma: plain: 32.73->33.90 || chosen plain, sigma 0.208 0.349 0.308 0.252, told x1.0
+CHOICE ct30: r1: 27.58->29.18 | r3: 27.74->28.63 || chosen r1, sigma 0.900 0.825 0.330 0.165, told x1.0
+CHOICE ct60: r1: 31.15->32.21 | r3: 31.45->31.58 || chosen r1, sigma 0.500 0.450 0.330 0.165, told x1.2
+CHOICE mri4: r1: 30.55->31.23 | r3: 30.60->30.80 || chosen r1, sigma 0.900 0.450 0.330 0.165, told x1.2
+CHOICE mri8: r1: 27.02->27.81 | r3: 27.05->27.62 || chosen r1, sigma 1.650 0.825 0.330 0.165, told x1.5
+| Task | Chosen on generated images | Clean protocol, test | Previous number |
+|---|---|---|---|
+| sr_bicubic | fw; sigma 0.47 0.24 0.17 0.17; told x1.5 | 24.81/0.362 | - |
+| deblur_gauss | fw; sigma 0.33 0.24 0.01 0.17; told x1.5 | 26.71/0.283 | - |
+| inpainting | fw; sigma 0.59 0.24 0.01 0.03; told x1.0 | 27.08/0.244 | - |
+| jpeg | softfw; sigma 2.29 1.03 0.35 0.01; told x1.5 | 25.21/0.355 | - |
+| deblur_nl | fw; sigma 2.29 0.19 0.56 0.25; told x1.5 | 24.08/0.392 | - |
+| hdr | plain; sigma 0.21 0.19 0.31 0.25; told x1.0 | 26.03/0.231 | - |
+| quant | plain; sigma 0.21 0.19 0.56 0.14; told x1.0 | 31.17/0.166 | - |
+| onebit | evfw; sigma 0.38 1.14 0.56 0.46; told x1.0 | 28.41/0.236 | - |
+| blurclip | ev; sigma 2.29 1.14 1.85 0.25; told x1.0 | 22.60/0.442 | - |
+| blurq | split; sigma 0.21 2.10 0.56 0.25; told x1.5 | 23.78/0.412 | - |
+| gamma | plain; sigma 0.21 0.35 0.31 0.25; told x1.0 | 31.92/0.173 | - |
+| ct30 | r1; sigma 0.90 0.82 0.33 0.17; told x1.0 | 26.34/0.298 | - |
+| ct60 | r1; sigma 0.50 0.45 0.33 0.17; told x1.2 | 28.85/0.198 | - |
+| mri4 | r1; sigma 0.90 0.45 0.33 0.17; told x1.2 | 28.60/0.218 | - |
+| mri8 | r1; sigma 1.65 0.82 0.33 0.17; told x1.5 | 25.19/0.331 | - |
+
+## 5_mri_pnp
+
+MRIB PnP-CM, celeba, MRI-type sampling R=4: 28.44/0.252 (n=107)
+MRIB PnP-CM, celeba, MRI-type sampling R=8: 26.13/0.302 (n=107)
+MRIB PnP-CM, bedroom, MRI-type sampling R=4: 26.52/0.254 (n=58)
+MRIB PnP-CM, bedroom, MRI-type sampling R=8: 24.05/0.334 (n=58)
+
+## 6_timing
+
+| Configuration | Seconds per image (median of 10) |
+|---|---|
+| sr_bicubic | 0.19 |
+| deblur_gauss | 0.19 |
+| inpainting | 0.19 |
+| jpeg | 0.22 |
+| deblur_nl | 0.27 |
+| hdr | 0.19 |
+| quant | 0.19 |
+| onebit | 0.19 |
+| prmask | 1.26 |
+| blurclip | 0.20 |
+| blurq | 0.19 |
+| gamma | 0.20 |
+| ct30 | 0.22 |
+| ct60 | 0.26 |
+| ctnl30 (no alternation) | 0.24 |
+| ctnl60 (no alternation) | 0.30 |
+| unmasked PR, non-iterative, 4 calls | 1.05 |
+| unmasked PR, iterative training-free, 4 calls | 2.23 |
+| PnP-CM gradient solver, HDR | 0.42 |
+| PnP-CM gradient solver, JPEG | 3.52 |
+| PnP-CM gradient solver, nonlinear deblur | 4.10 |
+| PnP-CM, SR (exact linear step) | 0.18 |

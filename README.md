@@ -1,6 +1,6 @@
 # Few-step consistency-model solver for inverse problems (built on PnP-CM)
 
-Working repository (status of 2026-11-24). Full result tables and every experiment: `mode_probe/RESULTS_structured_combinations.md`.
+Working repository (status of 2026-11-24). **Start with `MORNING_REPORT.md`: final tables for both datasets, real MRI, timings and limits.** Full result tables and every experiment: `mode_probe/RESULTS_structured_combinations.md`.
 Older write-ups, not updated since 2026-11-21: `mode_probe/PROJECT_SUMMARY.md`, `mode_probe/PHASE_RETRIEVAL_REPORT.md`.
 
 ## Idea
@@ -35,8 +35,8 @@ CelebA-HQ, 107 test images. DPS / DAPS: about 1000 calls, CelebA-HQ diffusion pr
 | HDR | 23.17/0.359 | 25.07/0.279 | 25.62/0.272 | 25.88/0.271 | 26.42/0.268 |
 | 3-bit quantisation | 25.51/0.284 | 30.19/0.200 | 27.75/0.260 | 25.25/0.378 | 31.31/0.182 |
 | One-bit | 19.03/0.516 | 23.16/0.447 | 28.82/0.217 | 22.38/0.512 | 30.30/0.213 |
-| Masked phase retrieval | 22.93/0.463 | 24.02/0.416 | 24.79/0.308 | 27.03/0.318 | 28.38/0.270 |
-| Unmasked phase retrieval | ~13 | - | 13.43/0.643 | 26.70/0.308 | 23.62/0.369 (24.38/0.336 at 8 calls) |
+| Masked phase retrieval | 22.93/0.463 | 24.02/0.416 | 24.79/0.308 | 27.03/0.318 | 28.57/0.270 |
+| Unmasked phase retrieval | ~13 | - | 13.43/0.643 | 26.70/0.308 | 24.18/0.371 (25.18/0.328 at 8 calls; 25.69/0.317 with the predictor) |
 | Coded diffraction, 2 masks | 28.65/0.186 | - | - | - | 34.45/0.126 |
 | Linear CT 60 / 30 views | 28.40 / 26.89 | - | 28.75/0.218, 27.70/0.231 | 30.59/0.227, failed | 32.25/0.171, 30.03/0.223 |
 | Nonlinear CT 60 / 30 views | 25.24/0.326, 23.93/0.355 | - | 24.80/0.270, 24.15/0.278 | 28.55/0.254, 27.65/0.264 | 28.73/0.254, 27.47/0.292 |

@@ -2,6 +2,7 @@
 /*
 !/.gitignore
 !/README.md
+!/MORNING_REPORT.md
 !/setup.sh
 !/relocate.sh
 !/sync_large.sh
