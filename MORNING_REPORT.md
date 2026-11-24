@@ -3,6 +3,13 @@
 Everything queued overnight finished (04:10 to 07:33), with no failed batches. All choices were made on model-generated images; test sets were used once.
 PSNR / LPIPS. Ours and PnP-CM: 4 model calls. DPS and DAPS: about 1000 calls, with a prior trained on the same dataset.
 
+## 0. One extrapolation for every task
+
+Every "Ours" number in sections 1 and 2 uses the SAME combination step: 8 radial frequency bands, terms = earlier passed-on images + this step's
+data-fit image + the model output, weights fitted by least squares on generated images (`zband8`; audited from the weight files on 2026-11-24:
+all are kind=band, 8 bands, data-fit term on). Only the data step differs between tasks. The region-wise variant in section 4 is a side
+experiment, is NOT used in any table and is not part of the method.
+
 ## 1. CelebA-HQ, 107 test images
 
 | Task | PnP-CM | PnP-CM + scalar extrapolation | DPS | DAPS | Ours |
