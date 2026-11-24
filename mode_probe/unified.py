@@ -1456,6 +1456,20 @@ def disc_prox(P):
     return prox
 
 
+def lle_region_mask(P, like):
+    """1 where a pixel is well measured, 0 elsewhere, read off the measurement itself (no ground truth): unclipped pixels for clipping tasks,
+    kept pixels for inpainting; all ones for tasks without such a split."""
+    one = torch.ones(1, 1, like.shape[-2], like.shape[-1], device=like.device)
+    try:
+        if NEWOP in ("hdr", "blurclip") and P.y is not None and P.y.shape[-2:] == like.shape[-2:]:
+            return (P.y.abs() < 1.0 - 2 * SIGY).float()
+        if deg == "inpainting" and getattr(P, "ATy", None) is not None:
+            return (P.ATy.reshape(1, 3, like.shape[-2], like.shape[-1]).abs().sum(1, keepdim=True) > 0).float().expand(1, 3, -1, -1)
+    except Exception:
+        pass
+    return one.expand(1, 3, -1, -1)
+
+
 def lle_band_index(n, B, device):
     """Radial frequency band of every 2-D FFT coefficient: band 0 below 1.5 cycles per image, then octaves."""
     f = torch.fft.fftfreq(n, device=device) * n; r = (f[:, None] ** 2 + f[None, :] ** 2).sqrt()
@@ -1564,11 +1578,21 @@ def run_steps(P, model, st, sched, idx, nfe, pas=0):
             if n_it == 0:
                 hist.clear()
             STEPLOG.append((pas, 100 + n_it, xt.detach().half().cpu())); STEPLOG.append((pas, 200 + n_it, zt.detach().half().cpu()))   # model output, data-fit image
+            zh_ = state.setdefault("lle_zh", [])
+            if n_it == 0:
+                zh_.clear(); state["lle_mask"] = lle_region_mask(P, xt); STEPLOG.append((pas, 300, state["lle_mask"].detach().half().cpu()))
+            zh_.append(zt.to(xt.dtype))
             cf = LLE_C.get(str(n_it))
             if cf is not None and isinstance(cf, dict) and "kind" in cf:
                 # structured combinations.  terms = earlier passed-on images (+ this step's data-fit image if cf["z"]) + this step's model output
-                stk = torch.cat(hist + ([zt.to(xt.dtype)] if cf.get("z") else []) + [xt], 0); Wc = cf["W"].to(xt.device).float()
-                if cf["kind"] == "band":        # one weight per term and radial frequency band
+                stk = torch.cat(hist + (list(zh_) if cf.get("zall") else [zt.to(xt.dtype)] if cf.get("z") else []) + [xt], 0); Wc = cf["W"].to(xt.device).float()
+                if cf["kind"] == "regband":     # weights per term, frequency band AND measurement region (well-measured pixels / the rest)
+                    Fs_ = torch.fft.fft2(stk, norm="ortho"); bi_ = lle_band_index(xt.shape[-1], Wc.shape[2], xt.device); Mr_ = state["lle_mask"].to(xt.dtype)
+                    cb_ = [torch.fft.ifft2((Wc[r_][:, bi_][:, None] * Fs_).sum(0, keepdim=True), norm="ortho").real for r_ in range(2)]
+                    xt = (Mr_ * cb_[0] + (1 - Mr_) * cb_[1]).clamp(-1.0, 1.0)
+                if cf["kind"] == "regband":
+                    pass
+                elif cf["kind"] == "band":        # one weight per term and radial frequency band
                     xt = torch.fft.ifft2((Wc[:, lle_band_index(xt.shape[-1], Wc.shape[1], xt.device)][:, None] * torch.fft.fft2(stk, norm="ortho")).sum(0, keepdim=True), norm="ortho").real.clamp(-1.0, 1.0)
                 elif cf["kind"] == "gate":      # weights chosen per pixel by how much the model output moved since the previous step (nonlinear)
                     gi = torch.bucketize((xt - hist[-1]).abs().mean(1)[0], cf["thr"].to(xt.device))

@@ -254,3 +254,8 @@ Same pipeline in every arm (schedule, noise tilt, 4 calls, 8-band + data-fit com
 | ctnl30 | 27.47/0.292, 0.56s | 25.64/0.378, 3.85s (lr 0.02, 400 it) | - | - |
 
 Nonlinear CT row: the gradient arm inherits our penalty (0.03), which suits our data step; tuned separately with its own penalty it reached 23.93 without the combination. Gradient-solver sensitivity on generated images (worst / best setting): HDR 17.1 / 25.6, one-bit 14.0 / 22.3, tone curve 25.3 / 29.3, blur then clip 21.2 / 25.7, quantisation 26.7 / 27.8 dB.
+
+# Mean face rebuilt from generated images (2026-11-24, `meanface_rerun.py`)
+
+`mean_face01.pt` was the mean of 100 REAL images (two of them test images). With `mean_face_gen.pt` (mean of 512 generated images, now the default), 107 test images:
+masked phase retrieval (attempt 1, clean config) 28.38/0.270, channel signs right 98.1% (was 28.20/0.273); coded diffraction 34.45/0.126 (unchanged).
