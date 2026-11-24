@@ -282,3 +282,11 @@ Noise tilt 0.5, schedule tuned on generated images (4 calls: 1.80, 0.31, 0.17, 0
 | Predictor inside the fit | 24.63/0.362 | 25.69/0.317 | 0.0% | 24.07/0.356, 24.78/0.325 |
 
 DAPS (about 1000 calls): 26.70/0.308.
+
+# Attempt 2 results (2026-11-24, `attempt2.py`); choices on generated images; test set once
+
+Non-iterative unmasked phase retrieval (predictor -> one inverse transform -> model calls) with noise tilt 0.5, tuned schedule (0.70, 0.44, 0.15, 0.02) and the 8-band + data-fit combination, 107 x 3 noise draws:
+4 calls 23.63/0.377, 8 calls 25.01/0.336, 0.0% below 14 dB (without these components 22.87/0.385, 23.72/0.345). Iterative start with the same components: 24.18/0.371, 25.18/0.328 (training-free); 24.63/0.362, 25.69/0.317 (predictor inside the fit).
+
+Masked phase retrieval inside the operator class (two-piece data step with the true operator, `PR2=1`, coupling 0.3, no frequency-weighted arm), 107 test images, as produced:
+28.11/0.268 (2.8% of images below 14 dB, i.e. a wrong channel sign) | attempt 1 (reduction to inpainting, frequency-weighted, generated mean face) 28.38/0.270.
