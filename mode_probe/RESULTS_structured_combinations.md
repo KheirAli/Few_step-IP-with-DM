@@ -390,3 +390,28 @@ MRIB PnP-CM, bedroom, MRI-type sampling R=8: 24.05/0.334 (n=58)
 | PnP-CM gradient solver, JPEG | 3.52 |
 | PnP-CM gradient solver, nonlinear deblur | 4.10 |
 | PnP-CM, SR (exact linear step) | 0.18 |
+
+# Spectrum of the injected noise: four versions (2026-11-24, `noise_arms.py`)
+
+Each task's clean-protocol configuration (same data step, schedule, told level, 8-band combination refitted per arm on 128 generated images); 107 test images once.
+White | tilt 0.5 (current) | matched = spectrum from the measured error per radial band so that error + noise is white (`NOISE=shape`, tables measured on
+generated images) | fitted = one power gain per octave band (`NBG`), one round of coordinate search from the tilt's profile on 48 generated images.
+Schedules were tuned with the tilt on (favours the tilt over white and matched).
+
+| Task | White | Tilt 0.5 (current) | Matched to measured error | Fitted band gains |
+|---|---|---|---|---|
+| sr_bicubic | 27.69/0.306 | 28.28/0.297 | 28.30/0.292 | 28.34/0.300 |
+| deblur_gauss | 29.47/0.242 | 29.98/0.253 | 29.87/0.244 | 30.11/0.264 |
+| inpainting | 30.03/0.205 | 30.29/0.207 | 30.12/0.203 | 30.41/0.212 |
+| jpeg | 26.63/0.335 | 27.19/0.336 | 26.94/0.327 | 27.25/0.342 |
+| deblur_nl | 25.56/0.355 | 26.35/0.333 | 25.87/0.332 | 26.45/0.341 |
+| quant | 30.76/0.188 | 31.31/0.182 | 31.03/0.181 | 31.43/0.189 |
+| onebit | 29.28/0.237 | 30.30/0.213 | 29.77/0.212 | 30.51/0.231 |
+| gamma | 32.63/0.156 | 33.22/0.147 | 32.67/0.155 | 33.45/0.147 |
+| blurclip | 23.89/0.399 | 24.67/0.387 | 24.32/0.381 | 24.82/0.393 |
+| blurq | 25.77/0.363 | 26.62/0.351 | 26.31/0.345 | 26.78/0.362 |
+| ct30 | 28.34/0.290 | 30.03/0.223 | 29.12/0.240 | 30.37/0.238 |
+| ct60 | 31.31/0.199 | 32.25/0.171 | 31.79/0.174 | 32.57/0.182 |
+| hdr | 25.51/0.277 | 26.42/0.268 | 26.06/0.274 | 26.55/0.268 |
+
+Fitted profiles are nearly identical across tasks: the tilt's profile with band 4 (or 5) lowered by x0.4. Literature and next test (operator-domain coloured renoising, FIRE arXiv 2501.17468; residual-based variance): see session notes.

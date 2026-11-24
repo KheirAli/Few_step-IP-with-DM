@@ -905,8 +905,11 @@ def inject(r, sig, pas, step, pr):
     """Noise to add to r = z + u at this step."""
     w = torch.randn_like(r)
     sig = float(sig)
-    if (NOISE == "white" and TILT == 0) or sig < 0.05:
+    if (NOISE == "white" and TILT == 0 and not NBG) or sig < 0.05:
         return w * sig
+    if NOISE == "white" and NBG:                               # one power gain per octave band (the 8 bands of the combination), total power unchanged
+        g2 = torch.tensor(NBG, device=r.device)[lle_band_index(256, len(NBG), r.device)]
+        return torch.fft.ifft2(torch.fft.fft2(w, norm="ortho") * (g2 / g2.mean()).sqrt() * sig, norm="ortho").real
     fb, cnt = _bands(r.device); key = f"{pas}_{step}"
     if NOISE == "white":                                       # white budget, tilted toward high (TILT > 0) or low (TILT < 0) frequencies
         return _tilted(w, torch.full((256, 256), sig, device=r.device), fb)
@@ -925,6 +928,7 @@ def inject(r, sig, pas, step, pr):
     return _tilted(w, g, fb)
 
 
+NBG = [float(v) for v in os.environ.get("NBG", "").split(",") if v]
 TILT = float(os.environ.get("TILT", "0"))   # noise power multiplied by (frequency rank)^TILT, total power unchanged; 0 = off
 
 

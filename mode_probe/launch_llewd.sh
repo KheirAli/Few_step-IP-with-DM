@@ -16,4 +16,5 @@ for task in $TASKS; do runone cal1 ${CALDATA:-$L/data_gen512} "${CALSH:-0:256 25
 for task in $TASKS; do for mode in $MODES; do fit 1 base $task $mode; done; done; rm -rf $L/exp_fin_${TAG}cal1_*
 for K in $(seq 2 $((NSTEP-1))); do for task in $TASKS; do for mode in $MODES; do runone cal$K ${CALDATA:-$L/data_gen512} "${CALSH:-0:256 256:512}" $task $mode; done; done; wait
   for task in $TASKS; do for mode in $MODES; do fit $K $mode $task $mode; done; done; rm -rf $L/exp_fin_${TAG}cal${K}_*; done
+[ -n "$SKIPTEST" ] && { echo ALLDONE; exit 0; }
 for task in $TASKS; do for mode in $MODES; do runone test ${TESTDATA:-$L/data_paper} "${TESTSH:-0:54 54:107}" $task $mode; done; done; wait; echo ALLDONE
