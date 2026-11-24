@@ -129,3 +129,10 @@ Nonlinear CT, y = 1 - exp(-s) + noise 0.01 (`NEWOP=ctnl`), 107 test images, PSNR
 
 Statistical ideas (`three_ideas.py`, tuned on generated images): expected-value update on blur-then-clip 22.49/0.446 -> 23.62/0.433; on nonlinear CT no effect; eigenface regression start for HDR negative; Poisson CT (1000 photons, 30 views) Lambert-W update 25.33/0.363 vs logarithm of counts 24.77/0.372.
 Hessian commutator (relative): linear CT 0.0000, nonlinear CT 0.017 (Gaussian loss), 0.056 (Poisson loss).
+
+Nonlinear CT, number of alternations inside the data-fit (tuned config, zband8 refitted on generated images, 107 test, PSNR/LPIPS; `CTNL_N`, `CTNL_MU`):
+| Data-fit | 30 views | 60 views |
+|---|---|---|
+| 1 pass (no alternation, coupling weight 2) | 26.94/0.322 | 28.45/0.279 |
+| 4 passes | 27.58/0.280 | 28.88/0.246 |
+| 8 passes | 27.62/0.278 | 28.87/0.246 |

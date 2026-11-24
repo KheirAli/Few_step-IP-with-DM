@@ -614,8 +614,9 @@ def ctnl_prox(y, n=8):
             return lin(plog, v, 1.0, rho / CT_GAIN ** 2)
         if CTNL_MODE == "poislog":                               # baseline: logarithm of the counts, then the linear closed form
             return lin(plog, v, 1.0, rho / CT_I0)
-        z = v.clone()
-        for mu in [0.5 * (64.0 ** (i_ / max(n - 1, 1))) for i_ in range(n)]:
+        z = v.clone(); n_ = int(os.environ.get("CTNL_N", n))
+        # CTNL_N=1: NO alternation - one per-ray solve and one linear formula per step (coupling weight CTNL_MU); the outer steps do the rest
+        for mu in ([float(os.environ.get("CTNL_MU", "2"))] if n_ == 1 else [0.5 * (64.0 ** (i_ / max(n_ - 1, 1))) for i_ in range(n_)]):
             z = lin(pw(CT_ALPHA * _radon((z + 1) / 2), mu), v, mu, rho)
         return z
     prox.start = lambda r0: lin(plog, torch.zeros(1, 3, 256, 256, device=y.device), 1.0, r0)
