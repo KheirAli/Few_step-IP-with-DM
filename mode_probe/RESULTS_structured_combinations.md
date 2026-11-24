@@ -259,3 +259,15 @@ Nonlinear CT row: the gradient arm inherits our penalty (0.03), which suits our 
 
 `mean_face01.pt` was the mean of 100 REAL images (two of them test images). With `mean_face_gen.pt` (mean of 512 generated images, now the default), 107 test images:
 masked phase retrieval (attempt 1, clean config) 28.38/0.270, channel signs right 98.1% (was 28.20/0.273); coded diffraction 34.45/0.126 (unchanged).
+
+# Real MRI on a second dataset: M4Raw (2026-11-24, `m4raw_convert.py`, `m4raw_run.sh`)
+
+Public brain k-space (Zenodo 8056074): 0.3 T, 4 coils, T2, repetitions averaged; 40 slices (5 central slices of 8 validation subjects), padded 256 -> 320, ESPIRiT coil maps.
+PnP-CM's own real-MRI pipeline with its fastMRI BRAIN consistency model (trained at 3 T: a real domain shift), knee hyperparameters, 4 calls. PSNR ± std / SSIM:
+
+| Undersampling | PnP-CM | PnP-CM + noise tilt 0.5 |
+|---|---|---|
+| R = 4 | 24.55 ± 5.74 / 0.730 | 24.69 ± 5.65 / 0.733 |
+| R = 8 | 23.46 ± 4.98 / 0.703 | 23.76 ± 4.87 / 0.709 |
+
+Only the noise tilt is tested here (the combination step is not wired into the real-MRI pipeline). Absolute values are low and spread widely across slices, as expected under the field-strength shift.
