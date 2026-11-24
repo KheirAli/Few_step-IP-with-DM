@@ -1,0 +1,16 @@
+conditioning:
+  method: ps
+  params:
+    scale: 0.3
+
+data:
+  name: ffhq
+  root: ./data/bedroom/
+
+measurement:
+  operator:
+    name: blurclip
+
+  noise:
+    name: gaussian
+    sigma: 0.1

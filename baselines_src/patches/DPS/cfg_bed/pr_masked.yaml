@@ -1,0 +1,16 @@
+conditioning:
+  method: ps
+  params:
+    scale: 1.0
+
+data:
+  name: ffhq
+  root: ./data/bedroom/
+
+measurement:
+  operator:
+    name: pr_masked
+
+  noise: 
+    name: gaussian
+    sigma: 0.1

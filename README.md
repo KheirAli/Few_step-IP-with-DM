@@ -51,6 +51,38 @@ nonlinear deblur and blur then clip.
 Time per image: ours 0.2-0.6 s (phase retrieval 1.5-2.3 s); PnP-CM 0.2-0.6 s on linear and pointwise tasks, 3-11 s on JPEG, nonlinear
 deblur and phase retrieval; DPS and DAPS 33-90 s (DAPS up to 520 s on JPEG).
 
+## Nonlinear CT (raw transmission data, `y = 1 - exp(-Radon(x))`)
+
+Operator `NEWOP=ctnl` in `mode_probe/unified.py` (after Fridovich-Keil et al., arXiv 2310.03956). The data step is two closed-form updates:
+per ray, the line integral that best explains that ray (`ctnl_ray_fit`); then the image from the line integrals with a precomputed
+decomposition of the Radon operator (`ctnl_prox`). Applied once per step (`CTNL_N=1`); `CTNL_N=4` alternates them 4 times.
+
+```bash
+cd mode_probe && ../pnpcm_env/bin/python ct_svd.py 30 && ../pnpcm_env/bin/python ct_svd.py 60     # once per geometry: 14 s / 62 s, writes ct_svd_<views>.pt (2.5 / 5 GB, not in git)
+cd ../PnP-CM
+# tuned, no alternation (settings chosen on generated images): 27.47/0.292 at 30 views, 28.73/0.254 at 60 views with the combination weights
+CUDA_VISIBLE_DEVICES=0 DATA=$(realpath ../mode_probe/data_paper) SHARD=0:107 SAMPLE_SEED=1 RESTART=never NOISE=white NOLOG=1 MODE=unified TILT=0.5 \
+  NEWOP=ctnl CT_K=30 RHOX=0.03 CTNL_N=1 CTNL_MU=1 SIGS=0.9,0.45,0.594,0.165 SIGPOS=0,1,2,3 SIGTOLD=1.5 \
+  ../pnpcm_env/bin/python ../mode_probe/unified.py fin_ctnl_demo --deg=deblur_nl
+../pnpcm_env/bin/python ../mode_probe/ctnl_full.py      # full pipeline: penalty + schedule tuning on generated images, weights, test (4-pass version)
+../pnpcm_env/bin/python ../mode_probe/round3.py         # the no-alternation version, tuned; also coded-diffraction phase retrieval
+```
+
+Variants: `CTNL_MODE=log` (logarithm first, then the linear closed form: the conventional baseline), `CTNL_MODE=poisson` (photon counts, per-ray
+update in closed form with the Lambert W function; `CT_I0` photons per ray), `SOLVER=repo` (PnP-CM's gradient solver), `CT_SVD=1` with `NEWOP=ct`
+(linear CT in closed form). DPS / DAPS operators `ctnl30`, `ctnl60` are in `baselines_src/extra_ops.py`.
+
+| 107 CelebA-HQ test images | 30 views | 60 views |
+|---|---|---|
+| Logarithm, then linear closed form | 24.20/0.421 | 25.53/0.405 |
+| PnP-CM, learning rate tuned | 23.93/0.355 | 25.24/0.326 |
+| DPS (1000 calls) | 24.15/0.278 | 24.80/0.270 |
+| DAPS (~1000 calls) | 27.65/0.264 | 28.55/0.254 |
+| Ours, 4 calls, no alternation | 27.47/0.292 | 28.73/0.254 |
+| Ours, 4 calls, 4 alternations | 27.58/0.280 | 28.88/0.246 |
+
+LSUN bedroom (58 images): ours 24.10/0.380 and 25.46/0.319; DAPS 23.85/0.403 and 25.05/0.354; PnP-CM + extrapolation 21.12/0.488 and 22.44/0.438.
+
 ## Known limits (read before quoting numbers)
 
 - One run per method; 107 (CelebA-HQ) and 58 (bedroom) test images. 104 of the 107 CelebA-HQ test images exist in CelebA-HQ itself.
