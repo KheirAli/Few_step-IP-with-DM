@@ -504,3 +504,37 @@ problem splits into one W x W system per image row, solved directly (checked: re
 | R = 8 | 23.46/0.703 | 23.76/0.709 | 24.80/0.720 | 24.23/0.707 (penalty x1; generated: x1 31.43, x3 31.40, x10 30.60) |
 
 Generated-slice PSNR of the 10-iteration version: 34.74 (R=4), 31.24 (R=8). Time per slice about 1.8 s for both data steps (GPUs shared).
+
+# Filling the empty table cells (2026-11-26, `fill_cells.py`; memory-safe rerun, no failed batches)
+
+PnP-CM = same loop, its own gradient solver (exact linear step for linear CT and MRI-type sampling), no tilt, shipped schedule. Scalar extrapolation weights fitted on generated images of the same dataset. Unmasked phase retrieval scored with the better of the two 180-degree flips.
+
+| | Dataset | Task | Method | PSNR/LPIPS |
+|---|---|---|---|---|
+FILL | celeba | gamma | PnP-CM + scalar extrapolation | 28.83/0.187 |
+FILL | celeba | blurq | PnP-CM + scalar extrapolation | 25.34/0.362 |
+FILL | celeba | blurclip | PnP-CM + scalar extrapolation | 23.18/0.423 |
+FILL | celeba | ct60 | PnP-CM + scalar extrapolation | 30.57/0.198 |
+FILL | celeba | ct30 | PnP-CM + scalar extrapolation | 28.32/0.261 |
+FILL | celeba | ctnl60 | PnP-CM + scalar extrapolation | 25.68/0.310 |
+FILL | celeba | ctnl30 | PnP-CM + scalar extrapolation | 24.06/0.349 |
+FILL | celeba | mri4 | PnP-CM + scalar extrapolation | 29.40/0.224 |
+FILL | celeba | mri8 | PnP-CM + scalar extrapolation | 26.46/0.292 |
+FILL | celeba | cdp2 | PnP-CM + scalar extrapolation | 31.36/0.176 |
+FILL | celeba | pru | PnP-CM + scalar extrapolation | 13.77/0.758 |
+FILL | celeba | ct60 | PnP-CM | 28.45/0.245 |
+FILL | celeba | ct30 | PnP-CM | 27.45/0.278 |
+FILL | celeba | pru | PnP-CM | 13.49/0.795 |
+FILL | bedroom | ct60 | PnP-CM + scalar extrapolation | 27.29/0.257 |
+FILL | bedroom | ct30 | PnP-CM + scalar extrapolation | 24.63/0.373 |
+FILL | bedroom | mri4 | PnP-CM + scalar extrapolation | 27.01/0.249 |
+FILL | bedroom | mri8 | PnP-CM + scalar extrapolation | 24.28/0.340 |
+FILL | bedroom | cdp2 | PnP-CM + scalar extrapolation | 30.68/0.176 |
+FILL | bedroom | pru | PnP-CM + scalar extrapolation | 14.02/0.729 |
+FILL | bedroom | ct60 | PnP-CM | 26.57/0.261 |
+FILL | bedroom | ct30 | PnP-CM | 24.45/0.362 |
+FILL | bedroom | cdp2 | PnP-CM | 28.18/0.186 |
+FILL | bedroom | pru | PnP-CM | 13.65/0.765 |
+FILL | bedroom | jpeg | Ours | 25.35/0.359 |
+FILL | bedroom | blurq | Ours | 23.90/0.410 |
+FILL | bedroom | cdp2 | Ours | 34.92/0.102 |
