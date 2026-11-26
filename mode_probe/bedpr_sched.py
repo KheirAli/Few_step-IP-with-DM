@@ -6,9 +6,11 @@ usage (from PnP-CM/): python ../mode_probe/bedpr_sched.py <free|direct>      -> 
 import sys, os, glob, re, json, subprocess, shutil, time, numpy as np, torch
 from PIL import Image
 task = sys.argv[1]; L = "../mode_probe"; NI = 48; MAXP = int(os.environ.get("MAXP", "2")); gs = lambda a, n: [float(v) for v in np.geomspace(a, 0.03, n)]
+MP = "../mode_probe/bedpr_maxp_" + os.path.basename(sys.argv[0])[6:-3] + ".txt"; open(MP, "w").write(str(MAXP)) if not os.path.exists(MP) else None
 B = "NEWOP=prdaps PRD_K=0 PRD_FINAL=0 PRD_SOFT=1 PRD_BATCH=1 PRD_OFFSET=1"
 CFG = {"free": ("deblur_nl", f"{B} PRD_TV=80 PRD_INIT=regfit4 PRD_NSTART=16 TILT=0.5", gs(1.0, 4)),                       # = face key pru_t05
        "direct": ("deblur_nl", f"{B} PRD_NET=v2k8 PRD_INIT=netdirect PRD_TV=0 PRD_NETR=32 TILT=0.5", gs(0.7, 4))}         # = face key prd_t05
+exec(open("../mode_probe/bedpr_cfg.py").read()); CFG[task] = (CFG[task][0], CFG[task][1] + "".join(f" {k}={v}" for k, v in W0(task, "gen").items()), CFG[task][2])
 deg, extra, base = CFG[task]; DATA = os.path.realpath(f"{L}/data_bedgen")
 f_ = torch.fft.fftfreq(256) * 256; BI = torch.bucketize((f_[:, None] ** 2 + f_[None, :] ** 2).sqrt(), torch.tensor([1.5 * 2 ** k for k in range(7)])).reshape(-1).repeat(3)
 def score(tag, n, N):
@@ -41,7 +43,7 @@ def run(cands, name):
             act.remove(it); ok = len(glob.glob(f"{L}/exp_fin_{tag}_s0/raw_*.pt")) == NI
             if ok or tr >= 6: done[tag] = score(tag, NI, len(c[0])); shutil.rmtree(f"{L}/exp_fin_{tag}_s0", ignore_errors=True)
             else: print(f"   rerun {tag} (try {tr + 2})", flush=True); todo.append((tag, c, tr + 1))
-        if todo and len(act) < MAXP:
+        if todo and len(act) < int(open(MP).read()):
             tag, c, tr = todo.pop(0); act.append((tag, c, tr, launch(tag, *c))); time.sleep(40); continue
         time.sleep(5)
     return [done[f"bedprcd2_{task}_{name}_{k}"] for k in range(len(cands))]

@@ -538,3 +538,70 @@ FILL | bedroom | pru | PnP-CM | 13.65/0.765 |
 FILL | bedroom | jpeg | Ours | 25.35/0.359 |
 FILL | bedroom | blurq | Ours | 23.90/0.410 |
 FILL | bedroom | cdp2 | Ours | 34.92/0.102 |
+
+# Real MRI: k-space interpolation map and regular sampling (2026-11-26/27, `mri_ours.py` MRIDATA=grappa|sense, `mri_maps.sh`)
+
+grappa: PnP-CM's random-line pattern; missing lines predicted from the nearest acquired line on each side (all coils, 5 taps), weights fitted on the scan's own centre lines; then one division per pixel. sense: every R-th line, no centre block; exact R x R system per alias group (checked: operator share outside the groups <= 1e-7). Penalty factor chosen on generated slices among x1, x3, x10 (grappa best at the upper edge, sense at the lower edge).
+
+generated slices, gaussian1d R=4, grappa step, penalty x1: PSNR 26.44
+generated slices, gaussian1d R=4, grappa step, penalty x3: PSNR 31.38
+generated slices, gaussian1d R=4, grappa step, penalty x10: PSNR 33.71
+M4RAW T2, gaussian1d R=4, ours with the grappa data step, penalty x10: PSNR (mean ± std): 25.25 ± 1.50;SSIM (mean ± std): 0.748 ± 0.066; data steps 323.4 ms |  lines left empty 0.0 of 240 missing on average; interpolation alone PSNR 19.57 
+generated slices, gaussian1d R=8, grappa step, penalty x1: PSNR 18.84
+generated slices, gaussian1d R=8, grappa step, penalty x3: PSNR 22.66
+generated slices, gaussian1d R=8, grappa step, penalty x10: PSNR 27.98
+M4RAW T2, gaussian1d R=8, ours with the grappa data step, penalty x10: PSNR (mean ± std): 24.24 ± 1.41;SSIM (mean ± std): 0.683 ± 0.082; data steps 152.0 ms |  lines left empty 58.0 of 280 missing on average; interpolation alone PSNR 16.48 
+M4RAW T2, regular1d R=4, PnP-CM (10 solver iterations, no tilt, no combination): PSNR (mean ± std): 21.98 ± 5.04;SSIM (mean ± std): 0.701 ± 0.119; data steps 38.2 ms
+generated slices, regular1d R=4, sense step, penalty x1: PSNR 32.34
+generated slices, regular1d R=4, sense step, penalty x3: PSNR 29.63
+generated slices, regular1d R=4, sense step, penalty x10: PSNR 26.81
+M4RAW T2, regular1d R=4, ours with the sense data step, penalty x1: PSNR (mean ± std): 22.87 ± 4.17;SSIM (mean ± std): 0.710 ± 0.104; data steps 37.3 ms | MRISENSE R=4: systems of size 4, 25600 per slice; share of the operator outside the alias groups 9.5e-08  
+M4RAW T2, regular1d R=8, PnP-CM (10 solver iterations, no tilt, no combination): PSNR (mean ± std): 19.61 ± 3.90;SSIM (mean ± std): 0.648 ± 0.107; data steps 28.6 ms
+generated slices, regular1d R=8, sense step, penalty x1: PSNR 24.33
+generated slices, regular1d R=8, sense step, penalty x3: PSNR 23.33
+generated slices, regular1d R=8, sense step, penalty x10: PSNR 22.23
+M4RAW T2, regular1d R=8, ours with the sense data step, penalty x1: PSNR (mean ± std): 21.62 ± 2.55;SSIM (mean ± std): 0.668 ± 0.088; data steps 38.6 ms | MRISENSE R=8: systems of size 8, 12800 per slice; share of the operator outside the alias groups 0.0e+00  
+
+[exited with code 0]
+
+# Real MRI, selection and weights on NOISE-MATCHED generated slices (2026-11-27, `mri_noisy.sh`, MRINOISE=1)
+
+Wider penalty sweeps on noise-free generated slices picked settings that failed on real scans at R=8 (interpolation x100: 23.37/0.674; regular x0.3: 18.29/0.612). Fix: complex Gaussian noise added to the simulated k-space at the level read from the outer k-space corners of the 4 calibration subjects (std 0.043 per sample, image max 1). All weights and penalty factors refitted on these 80 slices; 40 test slices once per data step. These replace the earlier real-MRI numbers of our method. PnP-CM: 24.55/0.730 (R=4), 23.46/0.703 (R=8) random lines; 21.98/0.701, 19.61/0.648 regular lines.
+
+noisy generated slices: 80; noise std per k-space sample, mean over calibration slices: 0.0430
+generated slices, gaussian1d R=4, cg step, penalty x1: PSNR 28.78
+M4RAW T2, gaussian1d R=4, ours with the cg data step, penalty x1: PSNR (mean ± std): 29.26 ± 2.69;SSIM (mean ± std): 0.827 ± 0.074;
+generated slices, gaussian1d R=4, exact step, penalty x1: PSNR 28.88
+generated slices, gaussian1d R=4, exact step, penalty x3: PSNR 31.70
+generated slices, gaussian1d R=4, exact step, penalty x10: PSNR 31.08
+generated slices, gaussian1d R=4, exact step, penalty x30: PSNR 30.58
+M4RAW T2, gaussian1d R=4, ours with the exact data step, penalty x3: PSNR (mean ± std): 29.55 ± 2.67;SSIM (mean ± std): 0.833 ± 0.068;
+generated slices, gaussian1d R=4, grappa step, penalty x3: PSNR 18.81
+generated slices, gaussian1d R=4, grappa step, penalty x10: PSNR 26.71
+generated slices, gaussian1d R=4, grappa step, penalty x30: PSNR 28.97
+generated slices, gaussian1d R=4, grappa step, penalty x100: PSNR 29.01
+M4RAW T2, gaussian1d R=4, ours with the grappa data step, penalty x100: PSNR (mean ± std): 26.64 ± 2.33;SSIM (mean ± std): 0.715 ± 0.091;
+generated slices, gaussian1d R=8, cg step, penalty x1: PSNR 26.79
+M4RAW T2, gaussian1d R=8, ours with the cg data step, penalty x1: PSNR (mean ± std): 27.38 ± 1.93;SSIM (mean ± std): 0.775 ± 0.081;
+generated slices, gaussian1d R=8, exact step, penalty x1: PSNR 26.91
+generated slices, gaussian1d R=8, exact step, penalty x3: PSNR 29.43
+generated slices, gaussian1d R=8, exact step, penalty x10: PSNR 28.90
+generated slices, gaussian1d R=8, exact step, penalty x30: PSNR 28.40
+M4RAW T2, gaussian1d R=8, ours with the exact data step, penalty x3: PSNR (mean ± std): 27.50 ± 1.87;SSIM (mean ± std): 0.778 ± 0.077;
+generated slices, gaussian1d R=8, grappa step, penalty x3: PSNR 13.67
+generated slices, gaussian1d R=8, grappa step, penalty x10: PSNR 21.49
+generated slices, gaussian1d R=8, grappa step, penalty x30: PSNR 26.16
+generated slices, gaussian1d R=8, grappa step, penalty x100: PSNR 26.46
+M4RAW T2, gaussian1d R=8, ours with the grappa data step, penalty x100: PSNR (mean ± std): 24.46 ± 1.46;SSIM (mean ± std): 0.658 ± 0.087;
+generated slices, regular1d R=4, sense step, penalty x0.3: PSNR 21.36
+generated slices, regular1d R=4, sense step, penalty x1: PSNR 27.08
+generated slices, regular1d R=4, sense step, penalty x3: PSNR 28.36
+generated slices, regular1d R=4, sense step, penalty x10: PSNR 26.62
+M4RAW T2, regular1d R=4, ours with the sense data step, penalty x3: PSNR (mean ± std): 26.96 ± 2.52;SSIM (mean ± std): 0.802 ± 0.075;
+generated slices, regular1d R=8, sense step, penalty x0.3: PSNR 19.81
+generated slices, regular1d R=8, sense step, penalty x1: PSNR 22.85
+generated slices, regular1d R=8, sense step, penalty x3: PSNR 23.44
+generated slices, regular1d R=8, sense step, penalty x10: PSNR 22.45
+M4RAW T2, regular1d R=8, ours with the sense data step, penalty x3: PSNR (mean ± std): 23.88 ± 1.39;SSIM (mean ± std): 0.723 ± 0.069;
+
+[exited with code 0]

@@ -2232,20 +2232,24 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         Pb.prox = lambda v, rho: (refine(v, ER_) + float(rho) * v) / (1 + float(rho))
         if os.environ.get("PRD_SOFT", "0") == "1":
             Pb.prox = lambda v, rho: refine.soft_fit(v, float(rho) * float(os.environ.get("PRD_RS", "1")))
-        if os.environ.get("PRD_INIT", "hio") == "mean":
+        # PRD_W0CACHE=<dir>: the start stage (fit + classical loop; no model call, independent of the schedule) is stored per image and noise draw and
+        # reused by later runs with the same start settings; the random-generator state is stored too, so the sampler noise is unchanged.  Unset = off.
+        _wc = os.environ.get("PRD_W0CACHE", ""); _wf = os.path.join(_wc, f"w0_{state['img']}_m{os.environ.get('MEAS_SEED', '0')}.pt") if _wc else ""
+        _wh = torch.load(_wf, map_location=dev) if (_wf and os.path.exists(_wf)) else None; _pi = "cached" if _wh is not None else os.environ.get("PRD_INIT", "hio")
+        if _pi == "mean":
             w0 = refine.mean_init().clamp(-1.0, 1.0)
-        if os.environ.get("PRD_INIT", "hio") in ("oracle", "truth"):     # DIAGNOSTIC ONLY: start from the ground truth (or its eigenface projection)
+        if _pi in ("oracle", "truth"):     # DIAGNOSTIC ONLY: start from the ground truth (or its eigenface projection)
             x0_ = (state["gt"].to(dev) + 1) / 2; Bp = torch.load(_prf("pca_cm.pt"))
             Uo = Bp["U"][:int(os.environ.get("PRD_KMAX", "512"))].to(dev).flatten(1); mo = Bp["mu"].to(dev)
             w0 = x0_ if os.environ["PRD_INIT"] == "truth" else (mo + (((x0_ - mo).flatten() @ Uo.T) @ Uo).view(1, 3, 256, 256)).clamp(0, 1)
             w0 = w0 * 2 - 1
-        if os.environ.get("PRD_INIT", "hio") in ("regfit", "regfit4"):
+        if _pi in ("regfit", "regfit4"):
             w0 = refine.regfit_init(int(os.environ.get("PRD_NSTART", "4")) if os.environ["PRD_INIT"] == "regfit4" else 1).clamp(-1.0, 1.0)
-        if os.environ.get("PRD_INIT", "hio") == "netdirect":
+        if _pi == "netdirect":
             w0 = refine.netdirect_init().clamp(-1.0, 1.0)
-        if os.environ.get("PRD_INIT", "hio") == "netfit":
+        if _pi == "netfit":
             w0 = refine.netfit_init(int(os.environ.get("PRD_NETREG", "0"))).clamp(-1.0, 1.0)
-        if os.environ.get("PRD_INIT", "hio") == "pca":
+        if _pi == "pca":
             w0 = refine.pca_init(int(os.environ.get("PRD_KMAX", "256"))).clamp(-1.0, 1.0)
         if os.environ.get("PRD_BAND", "0") == "1":
             import numpy as _np
@@ -2259,8 +2263,12 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
 
         def _run_from(w0):
             r0 = _ps(w0, gt_) if gt_ is not None else float("nan"); ncm = 0
-            if int(os.environ.get("PRD_TV", "0")) > 0:
+            if int(os.environ.get("PRD_TV", "0")) > 0 and _wh is None:
                 w0 = refine.tv_loop(w0, int(os.environ["PRD_TV"])).clamp(-1.0, 1.0)
+            if _wh is not None:
+                w0 = _wh["w0"].to(dev); r0 = _wh["r0"]; torch.set_rng_state(_wh["rng"].cpu()); torch.cuda.set_rng_state(_wh["crng"].cpu(), dev)
+            elif _wf:
+                os.makedirs(_wc, exist_ok=True); torch.save({"w0": w0.cpu(), "r0": r0, "rng": torch.get_rng_state(), "crng": torch.cuda.get_rng_state(dev)}, _wf + f".{os.getpid()}"); os.replace(_wf + f".{os.getpid()}", _wf)
             sc_ = float(os.environ.get("PRD_CMC", "0"))
             import functions.fft_util as _FU
             if sc_ > 0:      # ONE model call inside the coarse stage: its mid-frequency phases become soft linear targets, then the classical loop again

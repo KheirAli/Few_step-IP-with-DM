@@ -12,3 +12,5 @@ if _f: JOBS += [("bedprF4", "pruF4", f"deblur_nl {FREE} {sg(_f)} TILT=0.5", "4",
 if _d: JOBS += [("bedprD4", "prdD4", f"deblur_nl {ND} TILT=0.5 {sg(_d)}", "4", "non-iterative start")]
 if "free" in _s8: JOBS += [("bedprF8", "pruF8", f"deblur_nl {FREE} {S8('free')}", "8", "training-free iterative start"), ("bedprN8", "pruN8", f"deblur_nl {NET} {S8('free')}", "8", "predictor-in-the-fit iterative start")]
 if "direct" in _s8: JOBS += [("bedprD8", "prdD8", f"deblur_nl {ND} {S8('direct')}", "8", "non-iterative start")]
+# start-stage cache (unified.py PRD_W0CACHE): one folder per (image set, start variant); the non-iterative start is not cached
+W0 = lambda tag_or_kind, split: {"PRD_W0CACHE": os.path.realpath(f"{L}/bedpr_w0") + f"/{split}_" + ("free" if ("F" in tag_or_kind or tag_or_kind == "free") else "net")} if not ("D" in tag_or_kind or tag_or_kind == "direct") else {}
