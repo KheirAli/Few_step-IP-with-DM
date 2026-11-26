@@ -605,3 +605,18 @@ generated slices, regular1d R=8, sense step, penalty x10: PSNR 22.45
 M4RAW T2, regular1d R=8, ours with the sense data step, penalty x3: PSNR (mean ± std): 23.88 ± 1.39;SSIM (mean ± std): 0.723 ± 0.069;
 
 [exited with code 0]
+
+# LSUN bedroom, unmasked phase retrieval (2026-11-27, agent run, scripts `bedpr_*.py`, files `*_bed.pt`)
+
+Start stage rebuilt from generated bedroom images only (eigen-images, regression, offset, phase predictor trained on 65k model samples for 8k steps - a
+shorter run than for faces). Schedules tuned on generated bedroom images; 58 test images x 3 noise draws, scored as produced (no flip allowance).
+
+| Start | 4 calls | 8 calls | Below 14 dB |
+|---|---|---|---|
+| Non-iterative | 16.79/0.626 | 16.83/0.602 | 17.8% / 16.1% |
+| Training-free iterative | 16.58/0.612 | 16.61/0.588 | 21.3% / 20.7% |
+| Predictor inside the fit | 16.85/0.594 | 16.96/0.567 | 20.7% / 20.7% |
+
+DAPS 20.06/0.457 (32.8% below 14 dB), DPS 9.98/0.740, PnP-CM 13.65/0.765, PnP-CM + scalar extrapolation 14.02/0.729.
+The start image is the bottleneck: about 16.1 dB on test for all three starts; the bedroom predictor reaches 18.1 dB on held-out model samples (faces 22.9),
+512 eigen-images reach 22.3 dB. `unified.py`: `_bed` files read when DSET=bedroom; optional start-stage cache `PRD_W0CACHE`.
