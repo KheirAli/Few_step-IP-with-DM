@@ -8,8 +8,8 @@ P=../pnpcm_env/bin/python; L=../mode_probe; mkdir -p $L/lle $L/logs_x; NGPU=${NG
 declare -A CFG=( [$KEY]="$CFGSTR" ); NSTEP=${NSTEP:-4}
 TASKS=$KEY; MODES=${MODES:-scalar blk8 pixs pix dct30 eig30}
 GL=(${GPULIST:-$(seq 0 $((NGPU-1)))}); g=${GOFF:-0}; runone() { local tag=$1 D=$2 SH=$3 task=$4 mode=$5; c=(${CFG[$task]}); deg=${c[0]}; for sh in $SH; do
-  env CUDA_VISIBLE_DEVICES=${GL[$((g%${#GL[@]}))]} DATA=$(realpath $D) SHARD=$sh SAMPLE_SEED=1 RESTART=never NOISE=white NOLOG=1 MODE=unified TILT=0.5 ${c[@]:1} LLE=$(realpath $L/lle)/${TAG}_${mode}_${task}.pt SAVE_STEPS=1 $P $L/unified.py fin_${TAG}${tag}_${mode}_${task}_$deg --deg=$deg > $L/logs_x/${TAG}${tag}_${mode}_${task}_${sh%%:*}.out 2>&1 & g=$((g+1)); if (( g % PAR == 0 )); then wait; fi; done; }
-fit() { local K=$1 src=$2 task=$3 mode=$4; c=(${CFG[$task]}); CUDA_VISIBLE_DEVICES=$(( ${GOFF:-0} % NGPU )) $P $L/lle_fit2.py ${TAG}cal${K}_${src}_${task}_${c[0]} $L/lle/${TAG}_${mode}_${task}.pt $K $mode $([ $task = prmask ] && echo pr) 2>&1 | grep -E "LLEFIT2|Error"; }
+  GPULIST="${GL[*]}" bash $L/gpurun.sh $L/logs_x/${TAG}${tag}_${mode}_${task}_${sh%%:*}.out env DATA=$(realpath $D) SHARD=$sh SAMPLE_SEED=1 RESTART=never NOISE=white NOLOG=1 MODE=unified TILT=0.5 ${c[@]:1} LLE=$(realpath $L/lle)/${TAG}_${mode}_${task}.pt SAVE_STEPS=1 $P $L/unified.py fin_${TAG}${tag}_${mode}_${task}_$deg --deg=$deg & g=$((g+1)); if (( g % PAR == 0 )); then wait; fi; done; }
+fit() { local K=$1 src=$2 task=$3 mode=$4; c=(${CFG[$task]}); GPULIST="${GL[*]}" MINFREE=4000 bash $L/gpurun.sh $L/logs_x/fit_${TAG}_${mode}_${task}_$K.log $P $L/lle_fit2.py ${TAG}cal${K}_${src}_${task}_${c[0]} $L/lle/${TAG}_${mode}_${task}.pt $K $mode $([ $task = prmask ] && echo pr); grep -E "LLEFIT2|Error" $L/logs_x/fit_${TAG}_${mode}_${task}_$K.log; }
 rm -f $L/lle/${TAG}_*.pt
 # round 1: no weights exist yet, so one run ("base") serves every mode
 for task in $TASKS; do runone cal1 ${CALDATA:-$L/data_gen512} "${CALSH:-0:256 256:512}" $task base; done; wait

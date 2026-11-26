@@ -42,6 +42,7 @@ for sub, src in [("logs", "exp/logs"), ("datasets", DATA or "exp/datasets"), ("i
         os.symlink(os.path.abspath(src), f"{exp}/{sub}")
 # DSET=bedroom : LSUN bedroom (the consistency model PnP-CM uses for natural scenes); default CelebA-HQ
 DSET = os.environ.get("DSET", "celeba"); DSET_PATH, DSET_CFG, DSET_CKPT = {"celeba": ("celeba_hq", "celeba_hq_256.yml", ""), "bedroom": ("bedroom", "lsun_bedroom_256.yml", "lsun_bedroom/cd_bedroom256_lpips.pt")}[DSET]
+_prf = lambda n: os.path.abspath("../mode_probe/" + (n[:-3] + "_bed.pt" if DSET == "bedroom" else n))   # unmasked phase retrieval: start-stage files built from generated bedroom images (bedpr_build.py)
 sys.argv = ["main.py"] + sys.argv[2:] + [f"--subset_start={S0}", f"--subset_end={S1E}", f"--path_y={DSET_PATH}",
                                          "--sigma_y=0.05", f"--config={DSET_CFG}", "--save_y", f"--exp={exp}"] + ([f"--model_ckpt={DSET_CKPT}"] if DSET_CKPT else [])
 
@@ -252,7 +253,7 @@ def prd_setup(y):
     def pca_init(kmax=256):
         # eigenface warm start: the image is restricted to mean + k directions of a face subspace built from samples of the
         # consistency model itself; the k coefficients are fitted to the measured magnitudes (L-BFGS, k grown 8 -> kmax).
-        Bp = torch.load(os.path.abspath("../mode_probe/pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device), Bp["var"].to(y.device)
+        Bp = torch.load(_prf("pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device), Bp["var"].to(y.device)
         c = torch.zeros(0, device=y.device)
         with torch.enable_grad():
             k = 8
@@ -305,7 +306,7 @@ def prd_setup(y):
             kap = (2 * mag.clamp(min=0) * G.abs() / sd ** 2).clamp(max=1e6); mag = mag * torch.special.i1e(kap) / torch.special.i0e(kap).clamp(min=1e-30)
         G = G / (G.abs() + 1e-8) * mag
         return (_FU.ifft2_m(G).real * S)[..., 64:320, 64:320].clamp(0, 1) * 2 - 1
-    OFF = torch.load(os.path.abspath("../mode_probe/face_bank_8192.pt"))["rbar"].to(y.device) if os.environ.get("PRD_OFFSET", "0") == "1" else 0.0
+    OFF = torch.load(_prf("face_bank_8192.pt"))["rbar"].to(y.device) if os.environ.get("PRD_OFFSET", "0") == "1" else 0.0
 
     def _fit_from(c, mu_, U_, var_):
         with torch.enable_grad():
@@ -353,7 +354,7 @@ def prd_setup(y):
         # magnitudes to K low-resolution face hypotheses; for each, the eigenface fit is run with the hypothesis' phases inside a
         # low-frequency disc as complex targets, then refitted freely on the magnitudes (phases are never locked).  Best magnitude fit wins.
         import torch.nn as nn
-        tag = os.environ.get("PRD_NET", "k8biglong"); Kh = int(tag[1]) if tag[0] == "k" else 8; Cn = torch.load(os.path.abspath(f"../mode_probe/phase_net_{tag}.pt"), map_location=y.device)
+        tag = os.environ.get("PRD_NET", "k8biglong"); Kh = int(tag[1]) if tag[0] == "k" else 8; Cn = torch.load(_prf(f"phase_net_{tag}.pt"), map_location=y.device)
         ch = [3, 64, 128, 256, 256, 256]; L = []
         for i in range(5): L += [nn.Conv2d(ch[i], ch[i + 1], 3, 2, 1), nn.GroupNorm(8, ch[i + 1]), nn.SiLU()]
         if not tag.startswith("v2"):
@@ -363,8 +364,8 @@ def prd_setup(y):
             from phnet_arch import Net2, feat2
             Kh = int(tag.split("k")[1]); net = Net2(Kh).to(y.device); net.load_state_dict(Cn["sd"]); net.eval(); H = net((feat2(amp, _FU) - Cn["fm"]) / Cn["fs"])[0]
         H = torch.nn.functional.interpolate(H, size=256, mode="bicubic", align_corners=False).clamp(0, 1)
-        Bp = torch.load(os.path.abspath("../mode_probe/pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device).flatten(1), Bp["var"].to(y.device)
-        Rg = torch.load(os.path.abspath("../mode_probe/reg_best.pt")); rs = torch.load(os.path.abspath("../mode_probe/reg_resstd.pt")).to(y.device)
+        Bp = torch.load(_prf("pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device).flatten(1), Bp["var"].to(y.device)
+        Rg = torch.load(_prf("reg_best.pt")); rs = torch.load(_prf("reg_resstd.pt")).to(y.device)
         creg = ((torch.log1p(amp.clamp(min=0))[..., 160:224, 160:224].flatten(1) - Rg["m"].to(y.device)) / Rg["s"].to(y.device) @ Rg["W"].to(y.device))[0]
         ii = torch.arange(384, device=y.device).float() - 192; M = ((ii[:, None] ** 2 + ii[None, :] ** 2).sqrt() < float(os.environ.get("PRD_NETR", "16"))).expand(1, 3, 384, 384)
         Afp = lambda im: _FU.fft2_m(torch.nn.functional.pad(im, (64, 64, 64, 64)))
@@ -394,7 +395,7 @@ def prd_setup(y):
         magnitudes agree best with the measurement is kept; its phases, attached to the MEASURED magnitudes, give the coarse image in one inverse
         transform.  Its phases inside the disc PRD_NETR are stored as linear targets for the data step.  No fit, no search over starts, no loop."""
         from phnet_arch import Net2, feat2
-        tag = os.environ.get("PRD_NET", "v2k8"); Cn = torch.load(os.path.abspath(f"../mode_probe/phase_net_{tag}.pt"), map_location=y.device); Kh = int(tag.split("k")[1])
+        tag = os.environ.get("PRD_NET", "v2k8"); Cn = torch.load(_prf(f"phase_net_{tag}.pt"), map_location=y.device); Kh = int(tag.split("k")[1])
         net = Net2(Kh).to(y.device); net.load_state_dict(Cn["sd"]); net.eval()
         with torch.no_grad(): H = net((feat2(amp, _FU) - Cn["fm"]) / Cn["fs"])[0]
         H = torch.nn.functional.interpolate(H, size=256, mode="bicubic", align_corners=False).clamp(0, 1)
@@ -408,11 +409,11 @@ def prd_setup(y):
         # calibrated inverse map + fit: (1) ridge regression, trained only on samples of the consistency model, predicts the 512
         # eigenface coefficients from the low-frequency log-magnitudes; (2) the coefficients are then refined on the measured
         # magnitudes (L-BFGS, 64 -> 512 components) starting from that prediction.  No ground truth, no model calls.
-        Bp = torch.load(os.path.abspath("../mode_probe/pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device).flatten(1), Bp["var"].to(y.device)
-        Rg = torch.load(os.path.abspath("../mode_probe/reg_best.pt"))
+        Bp = torch.load(_prf("pca_cm.pt")); mu_, U_, var_ = Bp["mu"].to(y.device), Bp["U"].to(y.device).flatten(1), Bp["var"].to(y.device)
+        Rg = torch.load(_prf("reg_best.pt"))
         creg = ((torch.log1p(amp.clamp(min=0))[..., 160:224, 160:224].flatten(1) - Rg["m"].to(y.device)) / Rg["s"].to(y.device) @ Rg["W"].to(y.device))[0]
         if nstart > 1:                                         # several starts around the regression prediction, keep the best magnitude fit
-            rs = torch.load(os.path.abspath("../mode_probe/reg_resstd.pt")).to(y.device); best = None
+            rs = torch.load(_prf("reg_resstd.pt")).to(y.device); best = None
             if os.environ.get("PRD_BATCH", "0") == "1" or int(os.environ.get("PRD_TOPK", "1")) > 1:
                 C0 = torch.stack([creg + (0 if j == 0 else 1.0) * torch.randn_like(creg) * rs for j in range(nstart)])
                 Cf = _fit_batch(C0, mu_, U_, var_) if os.environ.get("PRD_BATCH", "0") == "1" else torch.stack([_fit_from(c_, mu_, U_, var_) for c_ in C0])
@@ -2234,7 +2235,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
         if os.environ.get("PRD_INIT", "hio") == "mean":
             w0 = refine.mean_init().clamp(-1.0, 1.0)
         if os.environ.get("PRD_INIT", "hio") in ("oracle", "truth"):     # DIAGNOSTIC ONLY: start from the ground truth (or its eigenface projection)
-            x0_ = (state["gt"].to(dev) + 1) / 2; Bp = torch.load(os.path.abspath("../mode_probe/pca_cm.pt"))
+            x0_ = (state["gt"].to(dev) + 1) / 2; Bp = torch.load(_prf("pca_cm.pt"))
             Uo = Bp["U"][:int(os.environ.get("PRD_KMAX", "512"))].to(dev).flatten(1); mo = Bp["mu"].to(dev)
             w0 = x0_ if os.environ["PRD_INIT"] == "truth" else (mo + (((x0_ - mo).flatten() @ Uo.T) @ Uo).view(1, 3, 256, 256)).clamp(0, 1)
             w0 = w0 * 2 - 1

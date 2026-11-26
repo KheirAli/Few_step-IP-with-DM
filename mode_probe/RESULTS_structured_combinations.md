@@ -489,3 +489,18 @@ BQR generated images: posterior mean, 8 alternations: 27.36/0.356 (n=48) | curre
 BQR generated images: posterior mean (T x0.3), 8 alternations: 27.48/0.340 (n=48) | current 27.29/0.342
 BQR TEST posterior mean (T x0.3), 8 alternations: 26.90/0.349 (n=107) | current 26.62/0.351
 Adopted candidate: posterior mean with belief factor 0.3 (SPLIT_EV=0.3), 8 alternations: 26.90/0.349 vs 26.62/0.351. Without alternation: 26.25/0.369 (not adopted).
+
+# Real MRI (M4Raw T2, 40 slices) with our pipeline (2026-11-26, `mri_ours.py`, `mri_ours_run.sh`, `mri_exact2.sh`, `mri_exact3.sh`)
+
+Inside PnP-CM's own MRI code (brain consistency model, shipped schedule, 4 calls). Ours = noise tilt 0.5 + in-loop 8-band combination with the data-fit
+image as a term, weights fitted step by step on 80 GENERATED slices (2-step model samples, k-space simulated with the coil maps of 4 subjects that are
+not in the test set). Exact data step (`MRIEXACT=1`): the mask depends on one axis only, so after an inverse FFT along the fully sampled axis the
+problem splits into one W x W system per image row, solved directly (checked: residual 2e-7; 100 CG iterations converge to it within 5e-6; PnP-CM's
+10 iterations are 15% away from the minimiser at the first step's penalty). Penalty factor chosen on generated slices.
+
+| Undersampling | PnP-CM | PnP-CM + tilt | Ours, 10-iteration solver | Ours, exact row-wise step |
+|---|---|---|---|---|
+| R = 4 | 24.55/0.730 | 24.69/0.733 | 25.05/0.741 | 26.94/0.783 (penalty x3; generated: x1 34.84, x3 35.29, x10 34.01, x30 32.99) |
+| R = 8 | 23.46/0.703 | 23.76/0.709 | 24.80/0.720 | 24.23/0.707 (penalty x1; generated: x1 31.43, x3 31.40, x10 30.60) |
+
+Generated-slice PSNR of the 10-iteration version: 34.74 (R=4), 31.24 (R=8). Time per slice about 1.8 s for both data steps (GPUs shared).

@@ -93,5 +93,32 @@ def ctnl30(x):
     return 10.0 * (1.0 - torch.exp(-0.25 * _radon((x + 1) / 2, 30)))
 
 
-OPS = {"jpeg5": jpeg5, "quant8": quant8, "onebit": onebit, "hdr2": hdr, "pr_masked": pr_masked,
+# ---- added 2026-11-26: MRI-type sampling and coded diffraction, identical to mode_probe/unified.py (NEWOP=mri, NEWOP=prcdp PR_MASKS=2) ----
+def _mri(x, R):
+    k = ("mri", R)
+    if k not in _C:
+        g = torch.Generator().manual_seed(2024); n = 256; keep = torch.zeros(n, dtype=torch.bool); fr = torch.fft.fftfreq(n) * n
+        keep[fr.abs() < 12] = True; w = torch.exp(-0.5 * (fr / (n / 6)) ** 2); w[keep] = 0; extra = n // R - int(keep.sum())
+        keep[torch.multinomial(w, extra, replacement=False, generator=g)] = True; _C[k] = keep.float().view(1, 1, 1, n)
+    X = torch.fft.fft2(x, norm="ortho") * _C[k].to(x.device); return torch.cat([X.real, X.imag], -1)
+
+
+def mri4(x):
+    return _mri(x, 4)
+
+
+def mri8(x):
+    return _mri(x, 8)
+
+
+def cdp2(x):                                                   # coded diffraction, 2 random phase masks: magnitudes side by side
+    if "cdp" not in _C:
+        _C["cdp"] = torch.exp(2j * _math.pi * torch.rand(2, 1, 256, 256, generator=torch.Generator(device="cpu").manual_seed(777)))
+    D = _C["cdp"].to(x.device); out = []
+    for k_ in range(2):
+        Fx = torch.fft.fft2(D[k_] * (x * 0.5 + 0.5), norm="ortho"); out.append(2 * (Fx.real ** 2 + Fx.imag ** 2 + 1e-12).sqrt())
+    return torch.cat(out, -1)
+
+
+OPS = {"mri4": mri4, "mri8": mri8, "cdp2": cdp2, "jpeg5": jpeg5, "quant8": quant8, "onebit": onebit, "hdr2": hdr, "pr_masked": pr_masked,
        "gamma04": gamma04, "wrap2": wrap2, "blurclip": blurclip, "blurq": blurq, "ct60": ct60, "ct30": ct30, "ctnl60": ctnl60, "ctnl30": ctnl30}

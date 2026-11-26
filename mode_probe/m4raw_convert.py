@@ -6,7 +6,8 @@ src, out, con, nsub = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]); o
 files = sorted(glob.glob(os.path.join(src, "**", f"*_{con}*.h5"), recursive=True)); subj = {}
 for f in files: subj.setdefault(re.split(r"_", os.path.basename(f))[0], []).append(f)
 n = 0
-for s, fs in list(subj.items())[:nsub]:
+off = int(sys.argv[5]) if len(sys.argv) > 5 else 0
+for s, fs in list(subj.items())[off:off + nsub]:
     ks = np.mean([h5py.File(f, "r")["kspace"][()] for f in fs], 0)                 # [slices, coils, 256, 256], averaged over repetitions
     for sl in range(ks.shape[0] // 2 - 2, ks.shape[0] // 2 + 3):                   # 5 central slices
         img = sp.ifft(ks[sl], axes=(-1, -2)); img = np.pad(img, ((0, 0), (32, 32), (32, 32))); k320 = sp.fft(img, axes=(-1, -2)).astype(np.complex64)
