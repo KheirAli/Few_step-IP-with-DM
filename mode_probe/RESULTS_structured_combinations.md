@@ -466,3 +466,26 @@ JZ TEST posterior mean x0.35, unchanged schedule: 27.38/0.324 (n=107)
 Test (107 images): previous soft+fw 27.19/0.336 | posterior mean x0.5 27.40/0.324 | x0.35 27.38/0.324 | x0.35 + retuned schedule 27.45/0.338.
 Reading: the exact step gives about +0.2 dB and -0.012 LPIPS with ONE closed-form update per step (was 7); width factor is flat between 0.25 and 0.5;
 schedule retuning (PSNR criterion) buys +0.05 dB and loses the LPIPS gain - not adopted. DAPS 28.15/0.259 still ahead.
+
+# Blur then 3-bit quantisation: posterior mean and no alternation (2026-11-26, `blurq_exact.py`, `SPLIT_EV`, `SPLIT_N`)
+
+Half a quantisation step (0.125) is close to the noise level (0.1): the level is NOT recoverable exactly (unlike JPEG). Tested: per-coordinate posterior
+mean over the 8 levels in place of the nearest level, and one per-coordinate update + one linear solve in place of 8 alternations. Same schedule.
+Two shards ran out of GPU memory (GPUs shared): the "T x0.3" variant has 24 of 48 images, and one step's weights of "posterior mean, 8 alternations" were fitted on 64 images.
+
+BQ generated images: nearest level, 8 alternations (current): 27.29/0.342 (n=48)
+BQ generated images: posterior mean, 8 alternations: 27.35/0.356 (n=48)
+BQ generated images: posterior mean (T x0.3), 8 alternations: 27.52/0.340 (n=24)
+BQ generated images: posterior mean, no alternation, coupling 2: 26.84/0.371 (n=48)
+BQ generated images: posterior mean, no alternation, coupling 8: 26.85/0.360 (n=48)
+BQ generated images: nearest level, no alternation, coupling 2: 26.77/0.361 (n=48)
+BQ generated images: nearest level, no alternation, coupling 8: 26.80/0.359 (n=48)
+BQ chosen on generated images: posterior mean, 8 alternations | best without alternation: posterior mean, no alternation, coupling 8
+BQ TEST posterior mean, 8 alternations: 26.82/0.364 (n=107) | current 26.62/0.351 | DAPS 24.76/0.388 | DPS 24.63/0.276
+BQ TEST posterior mean, no alternation, coupling 8: 26.25/0.369 (n=107) | current 26.62/0.351 | DAPS 24.76/0.388 | DPS 24.63/0.276
+
+Rerun without memory failures (`blurq_rerun.py`):
+BQR generated images: posterior mean, 8 alternations: 27.36/0.356 (n=48) | current 27.29/0.342
+BQR generated images: posterior mean (T x0.3), 8 alternations: 27.48/0.340 (n=48) | current 27.29/0.342
+BQR TEST posterior mean (T x0.3), 8 alternations: 26.90/0.349 (n=107) | current 26.62/0.351
+Adopted candidate: posterior mean with belief factor 0.3 (SPLIT_EV=0.3), 8 alternations: 26.90/0.349 vs 26.62/0.351. Without alternation: 26.25/0.369 (not adopted).

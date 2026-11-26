@@ -568,7 +568,8 @@ def split_prox(pw, n=8):
     Alternates two CLOSED FORMS: the pointwise formula on w ~ Hz, and the linear (Fourier-diagonal) formula for z.  No model calls."""
     def prox(v, rho):
         rho = float(rho); z = v.clone(); H = None
-        for mu in [0.5 * (64.0 ** (i_ / max(n - 1, 1))) for i_ in range(n)]:
+        n_ = int(os.environ.get("SPLIT_N", n))                 # SPLIT_N=1: no alternation - one per-coordinate update, one linear solve (coupling SPLIT_MU)
+        for mu in ([float(os.environ.get("SPLIT_MU", "4"))] if n_ == 1 else [0.5 * (64.0 ** (i_ / max(n_ - 1, 1))) for i_ in range(n_)]):
             w = pw(_gblur(z), float(mu)); H = _HB[(v.shape[-1], v.device)]
             z = torch.fft.ifft2((mu * H * torch.fft.fft2(w) + rho * torch.fft.fft2(v)) / (mu * H ** 2 + rho)).real
         return z
@@ -2316,7 +2317,7 @@ def nl_entry(y, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, classes, a
                     z_ = _p0(v_, rho_); state.setdefault("bcJ", []).append([_bc_obj(y, v_, v_, rho_), _bc_obj(y, z_, v_, rho_)]); return z_
                 Pb.prox = _plog
         elif NEWOP == "blurq":
-            Pb.prox = split_prox(quant_prox(y)); w0 = y.clamp(-1.0, 1.0)
+            Pb.prox = split_prox(ev_fit(_q8, y) if SPLIT_EV > 0 else quant_prox(y)); w0 = y.clamp(-1.0, 1.0)   # SPLIT_EV: per-coordinate posterior mean over the 8 levels
         elif NEWOP == "onebit":
             Pb.prox = onebit_prox(torch.sign(y), A_funcs.tau); w0 = torch.zeros_like(y)
             if os.environ.get("GENERIC", ""): Pb.prox = blackbox_pointwise_prox(A_funcs.A, torch.sign(y))
