@@ -3,6 +3,7 @@
 !/.gitignore
 !/README.md
 !/MORNING_REPORT.md
+!/FINAL_TABLES.md
 !/setup.sh
 !/relocate.sh
 !/sync_large.sh

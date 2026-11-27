@@ -620,3 +620,9 @@ shorter run than for faces). Schedules tuned on generated bedroom images; 58 tes
 DAPS 20.06/0.457 (32.8% below 14 dB), DPS 9.98/0.740, PnP-CM 13.65/0.765, PnP-CM + scalar extrapolation 14.02/0.729.
 The start image is the bottleneck: about 16.1 dB on test for all three starts; the bedroom predictor reaches 18.1 dB on held-out model samples (faces 22.9),
 512 eigen-images reach 22.3 dB. `unified.py`: `_bed` files read when DSET=bedroom; optional start-stage cache `PRD_W0CACHE`.
+
+# DPS / DAPS on the remaining operators (2026-11-27, `score_base.py`)
+
+celeba: mri4 DPS 27.00/0.249, DAPS 30.04/0.251; mri8 DPS 25.70/0.257, DAPS 28.76/0.267; cdp2 DPS 31.28/0.193, DAPS 26.73/0.318; ct30 DAPS with lr 3e-6: 29.67/0.230.
+bedroom: mri4 DPS 24.54/0.330, DAPS 28.47/0.256; mri8 DPS 23.18/0.343, DAPS 26.44/0.291; cdp2 DPS 30.02/0.201, DAPS 26.86/0.302; ct30 DAPS with lr 3e-6: 26.97/0.276; phase_retrieval DPS 9.98/0.740, DAPS 20.06/0.457.
+Complete tables: FINAL_TABLES.md.

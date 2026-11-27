@@ -1,6 +1,6 @@
 # Few-step consistency-model solver for inverse problems (built on PnP-CM)
 
-Working repository (status of 2026-11-24). **Start with `MORNING_REPORT.md`: final tables for both datasets, real MRI, timings and limits.** Full result tables and every experiment: `mode_probe/RESULTS_structured_combinations.md`.
+Working repository (status of 2026-11-24). **Start with `FINAL_TABLES.md` (complete tables, 27 November) and `MORNING_REPORT.md` (earlier summary and limits).** Full result tables and every experiment: `mode_probe/RESULTS_structured_combinations.md`.
 Older write-ups, not updated since 2026-11-21: `mode_probe/PROJECT_SUMMARY.md`, `mode_probe/PHASE_RETRIEVAL_REPORT.md`.
 
 ## Idea
