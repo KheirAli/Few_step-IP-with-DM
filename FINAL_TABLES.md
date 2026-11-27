@@ -74,3 +74,44 @@ All choices and weights come from model-generated images; test sets are used onc
 - Bedroom rows for nonlinear CT and masked phase retrieval use the face settings with weights refitted on generated bedroom images. Bedroom unmasked phase retrieval uses a start stage
   rebuilt from generated bedroom images (weaker than the face one; predictor trained for a shorter run).
 - Real MRI: weights and penalty chosen on generated slices with measurement noise matched to the scans; the reference images are themselves noisy.
+
+## Wall clock per image (final configurations; one image at a time; median of 10)
+
+No GPU was idle for 20 hours, so these were measured on a GPU shared with another user's job (62-68% utilised by it). PnP-CM was measured back to back
+in the same session, so ratios are reliable; absolute values are inflated about 2.4x (PnP-CM SR: 0.44 s here, 0.18 s on an idle GPU on 24 November).
+"Loop" = model calls + data steps + combination; "total" also includes the start stage.
+
+| Row | Total s / image | Loop only s |
+|---|---|---|
+| sr_bicubic | 0.47 | 0.46 |
+| deblur_gauss | 0.51 | 0.50 |
+| inpainting | 0.52 | 0.52 |
+| deblur_nl | 0.70 | 0.69 |
+| hdr | 0.47 | 0.47 |
+| quant | 0.50 | 0.49 |
+| onebit | 0.46 | 0.46 |
+| gamma | 0.49 | 0.49 |
+| blurclip | 0.48 | 0.48 |
+| ct30 | 0.55 | 0.52 |
+| ct60 | 0.63 | 0.57 |
+| jpeg | 0.51 | 0.49 |
+| blurq | 0.50 | 0.50 |
+| mri4 | 0.46 | 0.45 |
+| mri8 | 0.47 | 0.46 |
+| ctnl30 | 0.58 | 0.55 |
+| ctnl60 | 0.73 | 0.68 |
+| prmask | 1.64 | 0.49 |
+| cdp2 | 0.49 | 0.47 |
+| pr_unmasked_4 | 4.14 | 0.47 |
+| pr_unmasked_8 | 4.66 | 0.92 |
+| pr_unmasked_free_4 | 9.07 | 0.47 |
+| pr_unmasked_noniter_4 | 1.39 | 0.46 |
+| PnP-CM sr_bicubic (exact linear step) | 0.44 | 0.44 |
+| PnP-CM hdr | 0.90 | 0.90 |
+| PnP-CM jpeg | 9.30 | 9.30 |
+| PnP-CM deblur_nl | 7.59 | 7.59 |
+| PnP-CM blurq | 1.02 | 1.02 |
+| PnP-CM ctnl30 | 1.99 | 1.96 |
+| PnP-CM cdp2 | 1.06 | 1.06 |
+| PnP-CM prmask | 17.03 | 17.03 |
+| PnP-CM mri4 (exact linear step) | 0.44 | 0.44 |
