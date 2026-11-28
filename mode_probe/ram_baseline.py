@@ -5,7 +5,10 @@ usage (from PnP-CM/): /usr/scratch/akheirandish3/BAM/.venv/bin/python ../mode_pr
 import os, sys, glob, time, types, numpy as np, torch, lpips, deepinv as dinv
 from PIL import Image
 sys.path.insert(0, os.getcwd()); sys.path.insert(0, "../baselines_src"); import extra_ops as EO
-dev = torch.device("cuda"); L = "../mode_probe"; lp = lpips.LPIPS(net="vgg", verbose=False).to(dev); ram = dinv.models.RAM(pretrained=True).to(dev).eval()
+dev = torch.device("cuda"); L = "../mode_probe"; lp = lpips.LPIPS(net="vgg", verbose=False).to(dev); ram = dinv.models.RAM(pretrained=True).to(dev).eval(); NAME = "RAM"
+if os.environ.get("RAMSTAR"):                                      # RAM fine-tuned on CelebA-HQ (BAM project); NOTE: its training set contains 104 of our 107 CelebA-HQ test images
+    sys.path.insert(0, "/usr/scratch/akheirandish3/BAM"); from bam.model import BAMNet
+    rs = BAMNet(pretrained=False).to(dev); rs.load_state_dict(torch.load(os.environ["RAMSTAR"], map_location=dev)["ema"]); ram = rs.ram.eval(); NAME = "RAM*"
 src = open("wrappers/natural_linear_wrapper.py").read().split("\n"); i0 = next(i for i, l in enumerate(src) if l.strip() == "deg = args.deg"); i1 = next(i for i, l in enumerate(src) if i > i0 and l.startswith("    else:"))
 body = "\n".join(l[4:] for l in src[i0:i1])
 def pnp_op(deg):
@@ -38,6 +41,6 @@ for ds, folder in (("celeba", "data_paper"), ("bedroom", "data_bed")):
                 with torch.no_grad(): r = ram(y, ph).clamp(0, 1)
                 torch.cuda.synchronize(); tt.append((time.time() - t0) / len(x))
                 with torch.no_grad(): Ps += (10 * torch.log10(1 / ((r - x) ** 2).mean(dim=(1, 2, 3)))).tolist(); Ls += lp(r * 2 - 1, x * 2 - 1).flatten().tolist()
-            print(f"RAM | {ds} | {t} | {np.mean(Ps):.2f}/{np.mean(Ls):.3f} (n={len(Ps)}) | {np.median(tt[1:]):.2f} s per image (shared GPU) | operator norm {c:.2f}", flush=True)
+            print(f"{NAME} | {ds} | {t} | {np.mean(Ps):.2f}/{np.mean(Ls):.3f} (n={len(Ps)}) | {np.median(tt[1:]):.2f} s per image (shared GPU) | operator norm {c:.2f}", flush=True)
         except Exception as e:
-            print(f"RAM | {ds} | {t} | failed: {type(e).__name__}: {str(e)[:150]}", flush=True)
+            print(f"{NAME} | {ds} | {t} | failed: {type(e).__name__}: {str(e)[:150]}", flush=True)

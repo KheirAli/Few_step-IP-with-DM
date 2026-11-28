@@ -124,6 +124,21 @@ def restore(ATy, model, A_funcs, betas, iN, gamma, deltas, rhos, mu_0, T_samplin
                 sig = (yk[:, ch][:, :, mw & cw].abs() ** 2).mean().sqrt(); k = k + sig / 2 ** 0.5 * torch.complex(torch.randn_like(k.real), torch.randn_like(k.real)); ST["sig"] = float(sig)
             sio.savemat(os.path.join(out, f"gen_{ST['n']:04d}_{j}.mat"), {"kspace": k[0].cpu().numpy().astype(np.complex64), "coils": A_funcs.sens[0].cpu().numpy().astype(np.complex64)})
         A_funcs.mask = m0; ST["n"] += 1; print(f"MRIGEN noise std per k-space sample {ST.get('sig', 0):.4f}", flush=True); return torch.zeros_like(ATy)
+    if MODE in ("ram", "ramstar"):                                  # RAM baseline: one forward pass on the same undersampled multi-coil k-space
+        if "ram" not in _C:
+            import deepinv as dinv
+            if MODE == "ramstar":
+                sys.path.insert(0, "/usr/scratch/akheirandish3/BAM"); from bam.model import BAMNet
+                rs = BAMNet(pretrained=False).to(dev); rs.load_state_dict(torch.load(os.environ["RAMSTAR"], map_location=dev)["ema"]); _C["ram"] = rs.ram.eval()
+            else:
+                _C["ram"] = dinv.models.RAM(pretrained=True).to(dev).eval()
+            _C["dinv"] = dinv
+        dinv = _C["dinv"]; yk = ST["y"]; r2c = A_funcs.real_to_nchw_comp; c2r = A_funcs.nchw_comp_to_real
+        A_ = lambda x, **k: torch.view_as_real(A_funcs.A(r2c(x))).permute(0, 1, 4, 2, 3).flatten(1, 2)                    # [1,2,H,W] real -> [1,2C,H,W] real
+        At_ = lambda y, **k: c2r(A_funcs.At(torch.view_as_complex(y.unflatten(1, (-1, 2)).permute(0, 1, 3, 4, 2).contiguous())))
+        sig = float(os.environ.get("RAMSIGMA", "0.03")); ph = dinv.physics.LinearPhysics(A=A_, A_adjoint=At_, noise_model=dinv.physics.GaussianNoise(sigma=sig))
+        yr = torch.view_as_real(yk * A_funcs.mask).permute(0, 1, 4, 2, 3).flatten(1, 2); t0_ = time.time(); x = _C["ram"](yr, ph); torch.cuda.synchronize()
+        ST["n"] += 1; print(f"MRITIME data steps of this slice {1000 * (time.time() - t0_):.1f} ms (whole RAM pass)", flush=True); return x.to(ATy.dtype)
     W = torch.load(WF) if (WF and os.path.exists(WF)) else {}
     pen = nn.Softplus()(torch.linspace(rhos[0], rhos[1], T_sampling)).to(dev) * float(os.environ.get("MRIRHOX", "1")); mom = (torch.tensor([mu_0]).repeat(T_sampling) / torch.arange(1, T_sampling + 1)).to(dev)
     xt = torch.zeros_like(ATy); xm = torch.zeros_like(ATy); ut = torch.zeros_like(ATy); um = torch.zeros_like(ATy)
