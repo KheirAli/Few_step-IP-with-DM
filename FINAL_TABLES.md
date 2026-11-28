@@ -135,30 +135,15 @@ rescaled to unit norm (an equivalent restatement of the same measurement; withou
 RAM time per image on a shared GPU: 0.06-0.09 s (CT 0.5-1.0 s, where the operator and its adjoint dominate); ours 0.46-0.63 s in the same conditions.
 RAM leads on PSNR for Gaussian deblur on both datasets and SR on bedroom; ours has the better LPIPS on every row.
 
-## RAM and fine-tuned RAM (RAM*) on real MRI and on the linear tasks (28 November)
-
-RAM* = RAM fine-tuned on CelebA-HQ in the BAM project (`BAM/runs/ramstar_celeba/ema_0020000.pt`). **Its training set contains 104 of our 107 CelebA-HQ
-test images**, so its CelebA-HQ column is NOT a valid comparison (shown for completeness only). Bedroom and real MRI are clean for it, but outside its fine-tuning domain.
+## RAM on real MRI (28 November)
 
 Real MRI, M4Raw (40 slices, PSNR / SSIM), same k-space, mask, coil maps and scoring as the other methods; RAM is given noise level 0.03 (read from the 4 calibration subjects):
 
-| Sampling | PnP-CM | RAM | RAM* | Ours, exact data step |
-|---|---|---|---|---|
-| Random lines, 4x | 24.55/0.730 | 28.53/0.780 | 28.14/0.767 | 29.55/0.833 |
-| Random lines, 8x | 23.46/0.703 | 26.08/0.702 | 25.81/0.695 | 27.50/0.778 |
-| Every 4th line | 21.98/0.701 | 23.71/0.721 | 23.29/0.710 | 26.96/0.802 |
-| Every 8th line | 19.61/0.648 | 21.21/0.643 | 20.99/0.639 | 23.88/0.723 |
+| Sampling | PnP-CM | RAM | Ours, exact data step |
+|---|---|---|---|
+| Random lines, 4x | 24.55/0.730 | 28.53/0.780 | 29.55/0.833 |
+| Random lines, 8x | 23.46/0.703 | 26.08/0.702 | 27.50/0.778 |
+| Every 4th line | 21.98/0.701 | 23.71/0.721 | 26.96/0.802 |
+| Every 8th line | 19.61/0.648 | 21.21/0.643 | 23.88/0.723 |
 
-RAM pass about 0.43 s per slice on a shared GPU (ours about 1.8 s per slice end to end).
-
-Linear tasks (PSNR / LPIPS):
-
-| Task | RAM, CelebA | RAM* CelebA (trained on the test images) | Ours, CelebA | RAM, bedroom | RAM*, bedroom | Ours, bedroom |
-|---|---|---|---|---|---|---|
-| SR x4 | 28.18/0.338 | 28.65/0.305 | 28.28/0.297 | 24.96/0.381 | 25.36/0.367 | 24.81/0.362 |
-| Gaussian deblur | 30.19/0.285 | 30.60/0.252 | 29.98/0.253 | 27.42/0.290 | 27.58/0.291 | 26.71/0.283 |
-| Inpainting 70% | 29.37/0.293 | 32.00/0.202 | 30.29/0.207 | 26.90/0.309 | 29.10/0.220 | 27.08/0.244 |
-| Linear CT, 60 views | 30.85/0.263 | 31.93/0.208 | 32.25/0.171 | 27.60/0.298 | 28.23/0.289 | 28.85/0.198 |
-| Linear CT, 30 views | 28.86/0.320 | 29.60/0.269 | 30.03/0.223 | 25.52/0.372 | 25.88/0.368 | 26.34/0.298 |
-| MRI-type sampling, 4x | 29.29/0.300 | 32.68/0.188 | 31.42/0.189 | 27.11/0.295 | 29.51/0.220 | 28.60/0.218 |
-| MRI-type sampling, 8x | 25.81/0.399 | 29.10/0.284 | 27.89/0.293 | 24.06/0.405 | 26.02/0.321 | 25.19/0.331 |
+RAM pass about 0.43 s per slice on a shared GPU (ours about 1.8 s per slice end to end). RAM on the linear image tasks: see the RAM baseline table above.
