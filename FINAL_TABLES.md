@@ -115,3 +115,22 @@ in the same session, so ratios are reliable; absolute values are inflated about 
 | PnP-CM cdp2 | 1.06 | 1.06 |
 | PnP-CM prmask | 17.03 | 17.03 |
 | PnP-CM mri4 (exact linear step) | 0.44 | 0.44 |
+
+## RAM baseline (Reconstruct Anything Model; public pretrained checkpoint, one forward pass)
+
+`mode_probe/ram_baseline.py`. RAM takes LINEAR operators only, so it has entries for the linear tasks; the nonlinear tasks (JPEG, nonlinear deblur, HDR,
+quantisation, one-bit, tone curve, blur + pointwise, nonlinear CT, phase retrieval) have none. Same operators and noise level as ours; each operator is
+rescaled to unit norm (an equivalent restatement of the same measurement; without it RAM gives 20 dB on SR and fails on CT). Not trained on either dataset.
+
+| Task | RAM, CelebA-HQ | Ours, CelebA-HQ | RAM, bedroom | Ours, bedroom |
+|---|---|---|---|---|
+| SR x4 | 28.18/0.338 | 28.28/0.297 | 24.96/0.381 | 24.81/0.362 |
+| Gaussian deblur | 30.19/0.285 | 29.98/0.253 | 27.42/0.290 | 26.71/0.283 |
+| Inpainting 70% | 29.37/0.293 | 30.29/0.207 | 26.90/0.309 | 27.08/0.244 |
+| Linear CT, 60 views | 30.85/0.263 | 32.25/0.171 | 27.60/0.298 | 28.85/0.198 |
+| Linear CT, 30 views | 28.86/0.320 | 30.03/0.223 | 25.52/0.372 | 26.34/0.298 |
+| MRI-type sampling, 4x | 29.29/0.300 | 31.42/0.189 | 27.11/0.295 | 28.60/0.218 |
+| MRI-type sampling, 8x | 25.81/0.399 | 27.89/0.293 | 24.06/0.405 | 25.19/0.331 |
+
+RAM time per image on a shared GPU: 0.06-0.09 s (CT 0.5-1.0 s, where the operator and its adjoint dominate); ours 0.46-0.63 s in the same conditions.
+RAM leads on PSNR for Gaussian deblur on both datasets and SR on bedroom; ours has the better LPIPS on every row.
